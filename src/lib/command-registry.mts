@@ -59,6 +59,14 @@ export class CommandRegistry {
       const now = Date.now();
       // Use provided TTL or default to 120000ms (2 minutes)
       const ttl = registration.ttl ?? 120000;
+
+      // If command already exists, clear its existing timers
+      const existingCommand = this.commands.get(registration.commandUUID);
+      if (existingCommand && existingCommand.timers) {
+        clearTimeout(existingCommand.timers.cleanupTimer);
+        clearTimeout(existingCommand.timers.reRegistrationTimer);
+      }
+
       const registeredCommand: RegisteredCommand = {
         commandUUID: registration.commandUUID,
         commandDisplayName: registration.commandDisplayName,
