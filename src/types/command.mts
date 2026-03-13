@@ -20,6 +20,11 @@ export interface CommandRegistration {
   ttl?: number; // Time-to-live in milliseconds (optional)
 }
 
+interface CommandTimers {
+  cleanupTimer: NodeJS.Timeout;
+  reRegistrationTimer: NodeJS.Timeout;
+}
+
 export interface RegisteredCommand {
   commandUUID: string;
   commandDisplayName?: string; // Optional display name for logs and UI
@@ -34,4 +39,5 @@ export interface RegisteredCommand {
   ttl: number; // Time-to-live in milliseconds
   registeredAt: number; // Timestamp when the command was registered
   expiresAt: number; // Timestamp when the command expires
+  timers?: CommandTimers; // Timers for cleanup and re-registration
 }

@@ -1,14 +1,8 @@
 import { NatsClient, log } from '@eeveebot/libeevee';
 import { CommandRegistration, RegisteredCommand } from '../types/command.mjs';
 
-interface CommandTimers {
-  cleanupTimer: NodeJS.Timeout;
-  reRegistrationTimer: NodeJS.Timeout;
-}
-
 export class CommandRegistry {
   private commands: Map<string, RegisteredCommand> = new Map();
-  private commandTimers: Map<string, CommandTimers> = new Map();
   private natsClient: InstanceType<typeof NatsClient> | null = null;
 
   constructor(natsClient?: InstanceType<typeof NatsClient>) {
@@ -18,14 +12,13 @@ export class CommandRegistry {
   // Cleanup-like method to clean up resources
   public destroy(): void {
     // Clear all command timers
-    for (const {
-      cleanupTimer,
-      reRegistrationTimer,
-    } of this.commandTimers.values()) {
-      clearTimeout(cleanupTimer);
-      clearTimeout(reRegistrationTimer);
+    for (const command of this.commands.values()) {
+      if (command.timers) {
+        clearTimeout(command.timers.cleanupTimer);
+        clearTimeout(command.timers.reRegistrationTimer);
+      }
     }
-    this.commandTimers.clear();
+    this.commands.clear();
   }
 
   /**
@@ -82,12 +75,9 @@ export class CommandRegistry {
         expiresAt: now + ttl,
       };
 
-      this.commands.set(registration.commandUUID, registeredCommand);
-
       // Set up individual timers for this command
       const cleanupTimer = setTimeout(() => {
         this.commands.delete(registration.commandUUID);
-        this.commandTimers.delete(registration.commandUUID);
         log.info('Expired command removed', {
           producer: 'router',
           commandUUID: registration.commandUUID,
@@ -103,11 +93,13 @@ export class CommandRegistry {
         }
       }, ttl / 2);
 
-      // Store timers so they can be cleared if needed
-      this.commandTimers.set(registration.commandUUID, {
+      // Store timers in the command object
+      registeredCommand.timers = {
         cleanupTimer,
         reRegistrationTimer,
-      });
+      };
+
+      this.commands.set(registration.commandUUID, registeredCommand);
 
       log.info('Registered command', {
         producer: 'router',
@@ -127,14 +119,13 @@ export class CommandRegistry {
   }
 
   unregisterCommand(commandUUID: string): boolean {
+    const command = this.commands.get(commandUUID);
     const result = this.commands.delete(commandUUID);
 
     // Clear timers for this command
-    const timers = this.commandTimers.get(commandUUID);
-    if (timers) {
-      clearTimeout(timers.cleanupTimer);
-      clearTimeout(timers.reRegistrationTimer);
-      this.commandTimers.delete(commandUUID);
+    if (command && command.timers) {
+      clearTimeout(command.timers.cleanupTimer);
+      clearTimeout(command.timers.reRegistrationTimer);
     }
 
     if (result) {
