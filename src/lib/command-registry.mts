@@ -3,9 +3,42 @@ import { CommandRegistration, RegisteredCommand } from '../types/command.mjs';
 
 export class CommandRegistry {
   private commands: Map<string, RegisteredCommand> = new Map();
+  private cleanupInterval: NodeJS.Timeout | null = null;
+  private readonly CLEANUP_INTERVAL_MS = 60000; // 1 minute
+  private readonly DEFAULT_TTL_MS = this.CLEANUP_INTERVAL_MS * 2; // 2 minutes
+
+  constructor() {
+    this.startPeriodicCleanup();
+  }
+
+  private startPeriodicCleanup(): void {
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupExpiredCommands();
+    }, this.CLEANUP_INTERVAL_MS);
+
+    // Ensure the interval doesn't prevent the process from exiting
+    if (this.cleanupInterval.unref) {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  public stopPeriodicCleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+
+  // Cleanup-like method to clean up resources
+  public destroy(): void {
+    this.stopPeriodicCleanup();
+  }
 
   registerCommand(registration: CommandRegistration): void {
     try {
+      const now = Date.now();
+      // Use provided TTL or default to 2x cleanup interval
+      const ttl = registration.ttl ?? this.DEFAULT_TTL_MS;
       const registeredCommand: RegisteredCommand = {
         commandUUID: registration.commandUUID,
         platformRegex: new RegExp(registration.platform),
@@ -16,12 +49,17 @@ export class CommandRegistry {
         commandRegex: new RegExp(registration.regex),
         platformPrefixAllowed: registration.platformPrefixAllowed,
         ratelimit: registration.ratelimit,
+        ttl: ttl,
+        registeredAt: now,
+        expiresAt: now + ttl,
       };
 
       this.commands.set(registration.commandUUID, registeredCommand);
       log.info('Registered command', {
         producer: 'router',
         commandUUID: registration.commandUUID,
+        ttl: ttl,
+        expiresAt: registeredCommand.expiresAt,
       });
     } catch (error) {
       log.error('Failed to register command', {
@@ -60,8 +98,16 @@ export class CommandRegistry {
     commandText: string,
     commonPrefixRegex?: string
   ): RegisteredCommand[] {
+    // Clean up expired commands first
+    this.cleanupExpiredCommands();
+
     return Array.from(this.commands.values()).filter((cmd) => {
-      // First check platform, network, instance, channel, and user regexes
+      // First check if command has expired
+      if (Date.now() > cmd.expiresAt) {
+        return false;
+      }
+
+      // Then check platform, network, instance, channel, and user regexes
       if (
         !cmd.platformRegex.test(platform) ||
         !cmd.networkRegex.test(network) ||
@@ -99,5 +145,47 @@ export class CommandRegistry {
       // Finally, check if the command regex matches the (possibly modified) text
       return cmd.commandRegex.test(textToMatch);
     });
+  }
+
+  /**
+   * Remove expired commands from the registry
+   */
+  cleanupExpiredCommands(): void {
+    const now = Date.now();
+    let expiredCount = 0;
+
+    for (const [commandUUID, command] of this.commands.entries()) {
+      if (now > command.expiresAt) {
+        this.commands.delete(commandUUID);
+        expiredCount++;
+        log.info('Expired command removed', {
+          producer: 'router',
+          commandUUID: commandUUID,
+        });
+      }
+    }
+
+    if (expiredCount > 0) {
+      log.info('Cleanup completed', {
+        producer: 'router',
+        expiredCount: expiredCount,
+      });
+    }
+  }
+
+  /**
+   * Get count of expired commands without removing them
+   */
+  getExpiredCommandCount(): number {
+    const now = Date.now();
+    let count = 0;
+
+    for (const command of this.commands.values()) {
+      if (now > command.expiresAt) {
+        count++;
+      }
+    }
+
+    return count;
   }
 }

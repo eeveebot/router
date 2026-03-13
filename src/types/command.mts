@@ -16,6 +16,7 @@ export interface CommandRegistration {
   regex: string; // regex pattern for the command itself
   platformPrefixAllowed: boolean;
   ratelimit: RateLimitConfig;
+  ttl?: number; // Time-to-live in milliseconds (optional)
 }
 
 export interface RegisteredCommand {
@@ -28,4 +29,7 @@ export interface RegisteredCommand {
   commandRegex: RegExp;
   platformPrefixAllowed: boolean;
   ratelimit: RateLimitConfig;
+  ttl: number; // Time-to-live in milliseconds
+  registeredAt: number; // Timestamp when the command was registered
+  expiresAt: number; // Timestamp when the command expires
 }

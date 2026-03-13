@@ -15,12 +15,14 @@ const commandRegistry = new CommandRegistry();
 //
 // Do whatever teardown is necessary before calling common handler
 process.on('SIGINT', () => {
+  commandRegistry.destroy();
   natsClients.forEach((natsClient) => {
     void natsClient.drain();
   });
 });
 
 process.on('SIGTERM', () => {
+  commandRegistry.destroy();
   natsClients.forEach((natsClient) => {
     void natsClient.drain();
   });
