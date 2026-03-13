@@ -75,7 +75,8 @@ const chatMessageSubscription = nats.subscribe(
         msgData.instance,
         msgData.channel,
         msgData.user,
-        msgData.text
+        msgData.text,
+        msgData.commonPrefixRegex
       );
 
       // For each matching command, publish a command execution message
