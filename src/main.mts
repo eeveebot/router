@@ -151,3 +151,6 @@ const commandRegisterSubscription = nats.subscribe(
   }
 );
 natsSubscriptions.push(commandRegisterSubscription);
+
+// Ask all modules to publish their commands
+void nats.publish('control.registercommands', JSON.stringify({}));
