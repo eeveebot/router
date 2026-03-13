@@ -55,18 +55,15 @@ const chatMessageSubscription = nats.subscribe(
   (subject, message) => {
     try {
       const msgData = JSON.parse(message.string());
-      log.info(
-        `Received chat message from ${msgData.user} in ${msgData.channel}: ${msgData.text}`,
-        {
-          producer: 'router',
-          subject: subject,
-          platform: msgData.platform,
-          network: msgData.network,
-          channel: msgData.channel,
-          user: msgData.user,
-          text: msgData.text,
-        }
-      );
+      log.info('Received chat message', {
+        producer: 'router',
+        subject: subject,
+        platform: msgData.platform,
+        network: msgData.network,
+        channel: msgData.channel,
+        user: msgData.user,
+        text: msgData.text,
+      });
 
       // Check if this message matches any registered commands
       const matchingCommands = commandRegistry.findMatchingCommands(
@@ -120,13 +117,11 @@ const chatMessageSubscription = nats.subscribe(
             }
           } catch (error) {
             // If the prefix regex is invalid, log an error but continue with original text
-            log.error(
-              `Invalid commonPrefixRegex: ${msgData.commonPrefixRegex}, using original text`,
-              {
-                producer: 'router',
-                error: (error as Error).message,
-              }
-            );
+            log.error('Invalid commonPrefixRegex, using original text', {
+              producer: 'router',
+              commonPrefixRegex: msgData.commonPrefixRegex,
+              error: (error as Error).message,
+            });
           }
         }
 
@@ -144,17 +139,21 @@ const chatMessageSubscription = nats.subscribe(
         };
 
         void nats.publish(commandSubject, JSON.stringify(commandMessage));
-        log.info(`Published command execution for ${command.commandUUID}`, {
+        log.info('Published command execution', {
           producer: 'router',
           commandUUID: command.commandUUID,
+          user: msgData.user,
           subject: commandSubject,
+          originalText: msgData.text,
+          matchedCommand: matchedCommand,
         });
       });
     } catch (err: unknown) {
       const error = err as Error;
-      log.error(`Failed to parse chat message: ${error.message}`, {
+      log.error('Failed to parse chat message', {
         producer: 'router',
         subject: subject,
+        errorMessage: error.message,
         rawMessage: message.string(),
       });
     }
@@ -184,18 +183,16 @@ const commandRegisterSubscription = nats.subscribe(
       }
 
       commandRegistry.registerCommand(registrationData);
-      log.info(
-        `Processed command registration for ${registrationData.commandUUID}`,
-        {
-          producer: 'router',
-          commandUUID: registrationData.commandUUID,
-        }
-      );
+      log.info('Processed command registration', {
+        producer: 'router',
+        commandUUID: registrationData.commandUUID,
+      });
     } catch (err: unknown) {
       const error = err as Error;
-      log.error(`Failed to process command registration: ${error.message}`, {
+      log.error('Failed to process command registration', {
         producer: 'router',
         subject: subject,
+        errorMessage: error.message,
         rawMessage: message.string(),
       });
     }

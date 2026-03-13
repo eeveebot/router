@@ -19,27 +19,25 @@ export class CommandRegistry {
       };
 
       this.commands.set(registration.commandUUID, registeredCommand);
-      log.info(`Registered command ${registration.commandUUID}`, {
+      log.info('Registered command', {
         producer: 'router',
         commandUUID: registration.commandUUID,
       });
     } catch (error) {
-      log.error(
-        `Failed to register command ${registration.commandUUID}: ${(error as Error).message}`,
-        {
-          producer: 'router',
-          commandUUID: registration.commandUUID,
-        }
-      );
+      log.error('Failed to register command', {
+        producer: 'router',
+        commandUUID: registration.commandUUID,
+        errorMessage: (error as Error).message,
+      });
     }
   }
 
   unregisterCommand(commandUUID: string): boolean {
     const result = this.commands.delete(commandUUID);
     if (result) {
-      log.info(`Unregistered command ${commandUUID}`, {
+      log.info('Unregistered command', {
         producer: 'router',
-        commandUUID,
+        commandUUID: commandUUID,
       });
     }
     return result;
@@ -90,13 +88,11 @@ export class CommandRegistry {
           }
         } catch (error) {
           // If the prefix regex is invalid, log an error but continue with original text
-          log.error(
-            `Invalid commonPrefixRegex: ${commonPrefixRegex}, using original text`,
-            {
-              producer: 'router',
-              error: (error as Error).message,
-            }
-          );
+          log.error('Invalid commonPrefixRegex, using original text', {
+            producer: 'router',
+            commonPrefixRegex: commonPrefixRegex,
+            error: (error as Error).message,
+          });
         }
       }
 
