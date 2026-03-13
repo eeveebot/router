@@ -135,6 +135,7 @@ const chatMessageSubscription = nats.subscribe(
           instance: msgData.instance,
           channel: msgData.channel,
           user: msgData.user,
+          userHost: msgData.userHost,
           text: processedText,
           originalText: msgData.text,
           matchedCommand: matchedCommand,
