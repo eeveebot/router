@@ -81,6 +81,32 @@ const chatMessageSubscription = nats.subscribe(
 
       // For each matching command, publish a command execution message
       matchingCommands.forEach((command) => {
+        // Process the command text to strip prefix if needed and extract matched command
+        let processedText = msgData.text;
+        let matchedCommand = '';
+
+        if (command.platformPrefixAllowed && msgData.commonPrefixRegex) {
+          try {
+            const prefixRegex = new RegExp(msgData.commonPrefixRegex);
+            const match = msgData.text.match(prefixRegex);
+            if (match) {
+              // Extract the matched prefix as the command
+              matchedCommand = match[0].trim();
+              // Remove the prefix from the command text
+              processedText = msgData.text.slice(match[0].length).trim();
+            }
+          } catch (error) {
+            // If the prefix regex is invalid, log an error but continue with original text
+            log.error(
+              `Invalid commonPrefixRegex: ${msgData.commonPrefixRegex}, using original text`,
+              {
+                producer: 'router',
+                error: (error as Error).message,
+              }
+            );
+          }
+        }
+
         const commandSubject = `command.execute.${command.commandUUID}`;
         const commandMessage = {
           platform: msgData.platform,
@@ -88,7 +114,9 @@ const chatMessageSubscription = nats.subscribe(
           instance: msgData.instance,
           channel: msgData.channel,
           user: msgData.user,
-          text: msgData.text,
+          text: processedText,
+          originalText: msgData.text,
+          matchedCommand: matchedCommand,
           timestamp: msgData.timestamp,
         };
 
