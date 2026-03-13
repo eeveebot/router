@@ -8,6 +8,7 @@ export interface RateLimitConfig {
 export interface CommandRegistration {
   type: 'command.register';
   commandUUID: string;
+  commandDisplayName?: string; // Optional display name for logs and UI
   platform: string; // regex pattern
   network: string; // regex pattern
   instance: string; // regex pattern
@@ -21,6 +22,7 @@ export interface CommandRegistration {
 
 export interface RegisteredCommand {
   commandUUID: string;
+  commandDisplayName?: string; // Optional display name for logs and UI
   platformRegex: RegExp;
   networkRegex: RegExp;
   instanceRegex: RegExp;

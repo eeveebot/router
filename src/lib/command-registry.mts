@@ -1,14 +1,19 @@
-import { log } from '@eeveebot/libeevee';
+import { NatsClient, log } from '@eeveebot/libeevee';
 import { CommandRegistration, RegisteredCommand } from '../types/command.mjs';
 
 export class CommandRegistry {
   private commands: Map<string, RegisteredCommand> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private reRegistrationInterval: NodeJS.Timeout | null = null;
   private readonly CLEANUP_INTERVAL_MS = 60000; // 1 minute
   private readonly DEFAULT_TTL_MS = this.CLEANUP_INTERVAL_MS * 2; // 2 minutes
+  private readonly REREGISTRATION_CHECK_INTERVAL_MS = this.DEFAULT_TTL_MS / 4; // Check every 30 seconds (1/4 of default TTL)
+  private natsClient: InstanceType<typeof NatsClient> | null = null;
 
-  constructor() {
+  constructor(natsClient?: InstanceType<typeof NatsClient>) {
+    this.natsClient = natsClient || null;
     this.startPeriodicCleanup();
+    this.startPeriodicReRegistrationCheck();
   }
 
   private startPeriodicCleanup(): void {
@@ -22,16 +27,81 @@ export class CommandRegistry {
     }
   }
 
+  private startPeriodicReRegistrationCheck(): void {
+    this.reRegistrationInterval = setInterval(() => {
+      this.promptReRegistration();
+    }, this.REREGISTRATION_CHECK_INTERVAL_MS);
+
+    // Ensure the interval doesn't prevent the process from exiting
+    if (this.reRegistrationInterval.unref) {
+      this.reRegistrationInterval.unref();
+    }
+  }
+
   public stopPeriodicCleanup(): void {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
+    }
+    if (this.reRegistrationInterval) {
+      clearInterval(this.reRegistrationInterval);
+      this.reRegistrationInterval = null;
     }
   }
 
   // Cleanup-like method to clean up resources
   public destroy(): void {
     this.stopPeriodicCleanup();
+  }
+
+  /**
+   * Prompt modules to re-register their commands that are halfway through their TTL
+   */
+  private promptReRegistration(): void {
+    if (!this.natsClient) {
+      return;
+    }
+
+    const now = Date.now();
+    const commandsToRefresh: RegisteredCommand[] = [];
+
+    // Find commands that are halfway through their TTL
+    for (const command of this.commands.values()) {
+      const halfLife = command.registeredAt + command.ttl / 2;
+      if (
+        now >= halfLife &&
+        now < halfLife + this.REREGISTRATION_CHECK_INTERVAL_MS
+      ) {
+        commandsToRefresh.push(command);
+      }
+    }
+
+    // Emit re-registration prompts for each command
+    for (const command of commandsToRefresh) {
+      // Emit to the general re-registration channel
+      void this.natsClient.publish(
+        'control.registerCommands',
+        JSON.stringify({})
+      );
+
+      // Emit to the command-specific re-registration channel if displayName exists
+      if (command.commandDisplayName) {
+        const subject = `control.registerCommands.${command.commandDisplayName}`;
+        void this.natsClient.publish(
+          subject,
+          JSON.stringify({
+            commandUUID: command.commandUUID,
+            commandDisplayName: command.commandDisplayName,
+          })
+        );
+      }
+
+      log.debug('Prompted re-registration for command', {
+        producer: 'router',
+        commandUUID: command.commandUUID,
+        commandDisplayName: command.commandDisplayName,
+      });
+    }
   }
 
   registerCommand(registration: CommandRegistration): void {
@@ -41,6 +111,7 @@ export class CommandRegistry {
       const ttl = registration.ttl ?? this.DEFAULT_TTL_MS;
       const registeredCommand: RegisteredCommand = {
         commandUUID: registration.commandUUID,
+        commandDisplayName: registration.commandDisplayName,
         platformRegex: new RegExp(registration.platform),
         networkRegex: new RegExp(registration.network),
         instanceRegex: new RegExp(registration.instance),
@@ -58,6 +129,7 @@ export class CommandRegistry {
       log.info('Registered command', {
         producer: 'router',
         commandUUID: registration.commandUUID,
+        commandDisplayName: registration.commandDisplayName,
         ttl: ttl,
         expiresAt: registeredCommand.expiresAt,
       });
@@ -65,6 +137,7 @@ export class CommandRegistry {
       log.error('Failed to register command', {
         producer: 'router',
         commandUUID: registration.commandUUID,
+        commandDisplayName: registration.commandDisplayName,
         errorMessage: (error as Error).message,
       });
     }
@@ -161,6 +234,7 @@ export class CommandRegistry {
         log.info('Expired command removed', {
           producer: 'router',
           commandUUID: commandUUID,
+          commandDisplayName: command.commandDisplayName,
         });
       }
     }

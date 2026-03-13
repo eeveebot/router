@@ -10,7 +10,6 @@ import { CommandRegistration } from './types/command.mjs';
 
 const natsClients: InstanceType<typeof NatsClient>[] = [];
 const natsSubscriptions: Array<Promise<string | boolean>> = [];
-const commandRegistry = new CommandRegistry();
 
 //
 // Do whatever teardown is necessary before calling common handler
@@ -50,6 +49,8 @@ const nats = new NatsClient({
 });
 natsClients.push(nats);
 await nats.connect();
+
+const commandRegistry = new CommandRegistry(nats);
 
 // Subscribe to chat.message.incoming.* messages
 const chatMessageSubscription = nats.subscribe(
@@ -203,4 +204,4 @@ const commandRegisterSubscription = nats.subscribe(
 natsSubscriptions.push(commandRegisterSubscription);
 
 // Ask all modules to publish their commands
-void nats.publish('control.registercommands', JSON.stringify({}));
+void nats.publish('control.registerCommands', JSON.stringify({}));
