@@ -1,114 +1,71 @@
 import { NatsClient, log } from '@eeveebot/libeevee';
 import { CommandRegistration, RegisteredCommand } from '../types/command.mjs';
 
+interface CommandTimers {
+  cleanupTimer: NodeJS.Timeout;
+  reRegistrationTimer: NodeJS.Timeout;
+}
+
 export class CommandRegistry {
   private commands: Map<string, RegisteredCommand> = new Map();
-  private cleanupInterval: NodeJS.Timeout | null = null;
-  private reRegistrationInterval: NodeJS.Timeout | null = null;
-  private readonly CLEANUP_INTERVAL_MS = 60000; // 1 minute
-  private readonly DEFAULT_TTL_MS = this.CLEANUP_INTERVAL_MS * 2; // 2 minutes
-  private readonly REREGISTRATION_CHECK_INTERVAL_MS = this.DEFAULT_TTL_MS / 4; // Check every 30 seconds (1/4 of default TTL)
+  private commandTimers: Map<string, CommandTimers> = new Map();
   private natsClient: InstanceType<typeof NatsClient> | null = null;
 
   constructor(natsClient?: InstanceType<typeof NatsClient>) {
     this.natsClient = natsClient || null;
-    this.startPeriodicCleanup();
-    this.startPeriodicReRegistrationCheck();
-  }
-
-  private startPeriodicCleanup(): void {
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupExpiredCommands();
-    }, this.CLEANUP_INTERVAL_MS);
-
-    // Ensure the interval doesn't prevent the process from exiting
-    if (this.cleanupInterval.unref) {
-      this.cleanupInterval.unref();
-    }
-  }
-
-  private startPeriodicReRegistrationCheck(): void {
-    this.reRegistrationInterval = setInterval(() => {
-      this.promptReRegistration();
-    }, this.REREGISTRATION_CHECK_INTERVAL_MS);
-
-    // Ensure the interval doesn't prevent the process from exiting
-    if (this.reRegistrationInterval.unref) {
-      this.reRegistrationInterval.unref();
-    }
-  }
-
-  public stopPeriodicCleanup(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
-    if (this.reRegistrationInterval) {
-      clearInterval(this.reRegistrationInterval);
-      this.reRegistrationInterval = null;
-    }
   }
 
   // Cleanup-like method to clean up resources
   public destroy(): void {
-    this.stopPeriodicCleanup();
+    // Clear all command timers
+    for (const {
+      cleanupTimer,
+      reRegistrationTimer,
+    } of this.commandTimers.values()) {
+      clearTimeout(cleanupTimer);
+      clearTimeout(reRegistrationTimer);
+    }
+    this.commandTimers.clear();
   }
 
   /**
-   * Prompt modules to re-register their commands that are halfway through their TTL
+   * Prompt modules to re-register a specific command that is halfway through its TTL
    */
-  private promptReRegistration(): void {
+  private promptReRegistration(command: RegisteredCommand): void {
     if (!this.natsClient) {
       return;
     }
 
-    const now = Date.now();
-    const commandsToRefresh: RegisteredCommand[] = [];
+    // Emit to the general re-registration channel
+    void this.natsClient.publish(
+      'control.registerCommands',
+      JSON.stringify({})
+    );
 
-    // Find commands that are halfway through their TTL
-    for (const command of this.commands.values()) {
-      const halfLife = command.registeredAt + command.ttl / 2;
-      if (
-        now >= halfLife &&
-        now < halfLife + this.REREGISTRATION_CHECK_INTERVAL_MS
-      ) {
-        commandsToRefresh.push(command);
-      }
-    }
-
-    // Emit re-registration prompts for each command
-    for (const command of commandsToRefresh) {
-      // Emit to the general re-registration channel
+    // Emit to the command-specific re-registration channel if displayName exists
+    if (command.commandDisplayName) {
+      const subject = `control.registerCommands.${command.commandDisplayName}`;
       void this.natsClient.publish(
-        'control.registerCommands',
-        JSON.stringify({})
+        subject,
+        JSON.stringify({
+          commandUUID: command.commandUUID,
+          commandDisplayName: command.commandDisplayName,
+        })
       );
-
-      // Emit to the command-specific re-registration channel if displayName exists
-      if (command.commandDisplayName) {
-        const subject = `control.registerCommands.${command.commandDisplayName}`;
-        void this.natsClient.publish(
-          subject,
-          JSON.stringify({
-            commandUUID: command.commandUUID,
-            commandDisplayName: command.commandDisplayName,
-          })
-        );
-      }
-
-      log.debug('Prompted re-registration for command', {
-        producer: 'router',
-        commandUUID: command.commandUUID,
-        commandDisplayName: command.commandDisplayName,
-      });
     }
+
+    log.debug('Prompted re-registration for command', {
+      producer: 'router',
+      commandUUID: command.commandUUID,
+      commandDisplayName: command.commandDisplayName,
+    });
   }
 
   registerCommand(registration: CommandRegistration): void {
     try {
       const now = Date.now();
-      // Use provided TTL or default to 2x cleanup interval
-      const ttl = registration.ttl ?? this.DEFAULT_TTL_MS;
+      // Use provided TTL or default to 120000ms (2 minutes)
+      const ttl = registration.ttl ?? 120000;
       const registeredCommand: RegisteredCommand = {
         commandUUID: registration.commandUUID,
         commandDisplayName: registration.commandDisplayName,
@@ -126,6 +83,32 @@ export class CommandRegistry {
       };
 
       this.commands.set(registration.commandUUID, registeredCommand);
+
+      // Set up individual timers for this command
+      const cleanupTimer = setTimeout(() => {
+        this.commands.delete(registration.commandUUID);
+        this.commandTimers.delete(registration.commandUUID);
+        log.info('Expired command removed', {
+          producer: 'router',
+          commandUUID: registration.commandUUID,
+          commandDisplayName: registration.commandDisplayName,
+        });
+      }, ttl);
+
+      // Set up re-registration timer for halfway through TTL
+      const reRegistrationTimer = setTimeout(() => {
+        const command = this.commands.get(registration.commandUUID);
+        if (command) {
+          this.promptReRegistration(command);
+        }
+      }, ttl / 2);
+
+      // Store timers so they can be cleared if needed
+      this.commandTimers.set(registration.commandUUID, {
+        cleanupTimer,
+        reRegistrationTimer,
+      });
+
       log.info('Registered command', {
         producer: 'router',
         commandUUID: registration.commandUUID,
@@ -145,6 +128,15 @@ export class CommandRegistry {
 
   unregisterCommand(commandUUID: string): boolean {
     const result = this.commands.delete(commandUUID);
+
+    // Clear timers for this command
+    const timers = this.commandTimers.get(commandUUID);
+    if (timers) {
+      clearTimeout(timers.cleanupTimer);
+      clearTimeout(timers.reRegistrationTimer);
+      this.commandTimers.delete(commandUUID);
+    }
+
     if (result) {
       log.info('Unregistered command', {
         producer: 'router',
@@ -171,9 +163,6 @@ export class CommandRegistry {
     commandText: string,
     commonPrefixRegex?: string
   ): RegisteredCommand[] {
-    // Clean up expired commands first
-    this.cleanupExpiredCommands();
-
     return Array.from(this.commands.values()).filter((cmd) => {
       // First check if command has expired
       if (Date.now() > cmd.expiresAt) {
@@ -218,48 +207,5 @@ export class CommandRegistry {
       // Finally, check if the command regex matches the (possibly modified) text
       return cmd.commandRegex.test(textToMatch);
     });
-  }
-
-  /**
-   * Remove expired commands from the registry
-   */
-  cleanupExpiredCommands(): void {
-    const now = Date.now();
-    let expiredCount = 0;
-
-    for (const [commandUUID, command] of this.commands.entries()) {
-      if (now > command.expiresAt) {
-        this.commands.delete(commandUUID);
-        expiredCount++;
-        log.info('Expired command removed', {
-          producer: 'router',
-          commandUUID: commandUUID,
-          commandDisplayName: command.commandDisplayName,
-        });
-      }
-    }
-
-    if (expiredCount > 0) {
-      log.info('Cleanup completed', {
-        producer: 'router',
-        expiredCount: expiredCount,
-      });
-    }
-  }
-
-  /**
-   * Get count of expired commands without removing them
-   */
-  getExpiredCommandCount(): number {
-    const now = Date.now();
-    let count = 0;
-
-    for (const command of this.commands.values()) {
-      if (now > command.expiresAt) {
-        count++;
-      }
-    }
-
-    return count;
   }
 }
