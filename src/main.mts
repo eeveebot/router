@@ -763,6 +763,33 @@ const adminRequestSub = nats.subscribe(
           trace: data.trace,
           entryCount: Object.keys(stats).length,
         });
+      } else if (data.action === 'get-command-registry') {
+        log.info('Received admin request for command registry', {
+          producer: 'router',
+          trace: data.trace,
+        });
+
+        // Get command registry information
+        const registry = commandRegistry.getAllCommands();
+
+        // Send response back to admin module
+        const responseMessage = {
+          action: 'command-registry',
+          registry: registry,
+          requester: data.requester,
+          trace: data.trace,
+        };
+
+        void nats.publish(
+          'admin.response.router.command-registry',
+          JSON.stringify(responseMessage)
+        );
+
+        log.info('Sent command registry to admin module', {
+          producer: 'router',
+          trace: data.trace,
+          entryCount: registry.length,
+        });
       }
     } catch (error) {
       log.error('Failed to process admin request', {
