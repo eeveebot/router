@@ -256,13 +256,45 @@ export function handleChatMessage(
       // Since we already know this command matches from the registry, we just need to extract the args
       let processedText = msgData.text;
       let matchedCommand = '';
+      let textToMatch = msgData.text;
 
-      // Find the command match in the original text to properly extract args
-      const commandMatch = msgData.text.match(command.commandRegex);
+      // Apply the same prefix stripping logic as in command-registry.mts
+      // Apply platform prefix if allowed
+      if (command.platformPrefixAllowed && msgData.commonPrefixRegex) {
+        try {
+          const prefixRegex = new RegExp(msgData.commonPrefixRegex);
+          const match = textToMatch.match(prefixRegex);
+          if (match) {
+            // Remove the prefix from the command text for matching
+            textToMatch = textToMatch.slice(match[0].length).trim();
+          }
+        } catch (error) {
+          // If the prefix regex is invalid, log an error but continue with original text
+          log.error('Invalid commonPrefixRegex, using original text', {
+            producer: 'router',
+            commonPrefixRegex: msgData.commonPrefixRegex,
+            error: (error as Error).message,
+          });
+        }
+      }
+
+      // Apply nick prefix if allowed
+      if (command.nickPrefixAllowed && msgData.botNick) {
+        // Create a regex pattern to match the bot's nick followed by common separators
+        const nickPrefixPattern = new RegExp(`^${msgData.botNick}[:;, ]+`, 'i');
+        const nickMatch = textToMatch.match(nickPrefixPattern);
+        if (nickMatch) {
+          // Remove the nick prefix from the command text for matching
+          textToMatch = textToMatch.slice(nickMatch[0].length).trim();
+        }
+      }
+
+      // Find the command match in the processed text to properly extract args
+      const commandMatch = textToMatch.match(command.commandRegex);
       if (commandMatch) {
         matchedCommand = commandMatch[0];
-        // Remove the matched command from the text, leaving only args
-        const textAfterCommand = msgData.text
+        // Remove the matched command from the processed text, leaving only args
+        const textAfterCommand = textToMatch
           .slice((commandMatch.index || 0) + commandMatch[0].length)
           .trimStart();
         // Update processedText with the remaining text (args)
@@ -341,6 +373,7 @@ export function handleChatMessage(
         text: processedText,
         originalText: msgData.text,
         matchedCommand: matchedCommand,
+        matchedText: textToMatch, // The text that was actually matched against the command regex
         timestamp: msgData.timestamp,
       };
 
