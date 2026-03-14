@@ -8,6 +8,8 @@ import { NatsClient, log } from '@eeveebot/libeevee';
 import { CommandRegistry } from './lib/command-registry.mjs';
 import { CommandRegistration } from './types/command.mjs';
 import { RateLimiter } from './lib/rate-limiter.mjs';
+import { BroadcastRegistry } from './lib/broadcast-registry.mjs';
+import { BroadcastRegistration } from './types/broadcast.mjs';
 
 // Record module startup time for uptime tracking
 const moduleStartTime = Date.now();
@@ -16,7 +18,6 @@ export { rateLimiter };
 
 const natsClients: InstanceType<typeof NatsClient>[] = [];
 const natsSubscriptions: Array<Promise<string | boolean>> = [];
-
 
 //
 // Setup NATS connection
@@ -41,9 +42,8 @@ const nats = new NatsClient({
 natsClients.push(nats);
 await nats.connect();
 
-
 const commandRegistry = new CommandRegistry(nats);
-
+const broadcastRegistry = new BroadcastRegistry(nats);
 
 const rateLimiter = new RateLimiter(commandRegistry);
 
@@ -64,6 +64,7 @@ setInterval(() => {
 // Do whatever teardown is necessary before calling common handler
 process.on('SIGINT', () => {
   commandRegistry.destroy();
+  broadcastRegistry.destroy();
   natsClients.forEach((natsClient) => {
     void natsClient.drain();
   });
@@ -71,6 +72,7 @@ process.on('SIGINT', () => {
 
 process.on('SIGTERM', () => {
   commandRegistry.destroy();
+  broadcastRegistry.destroy();
   natsClients.forEach((natsClient) => {
     void natsClient.drain();
   });
@@ -101,6 +103,16 @@ const chatMessageSubscription = nats.subscribe(
         msgData.user,
         msgData.text,
         msgData.commonPrefixRegex
+      );
+
+      // Check if this message matches any registered broadcasts
+      const matchingBroadcasts = broadcastRegistry.findMatchingBroadcasts(
+        msgData.platform,
+        msgData.network,
+        msgData.instance,
+        msgData.channel,
+        msgData.user,
+        msgData.text
       );
 
       // For each matching command, check rate limits and publish command execution message
@@ -213,6 +225,29 @@ const chatMessageSubscription = nats.subscribe(
           matchedCommand: matchedCommand,
         });
       });
+
+      // For each matching broadcast, publish the message to the broadcast channel
+      matchingBroadcasts.forEach((broadcast) => {
+        const broadcastSubject = `broadcast.message.${broadcast.broadcastUUID}`;
+        const broadcastMessage = {
+          platform: msgData.platform,
+          network: msgData.network,
+          instance: msgData.instance,
+          channel: msgData.channel,
+          user: msgData.user,
+          userHost: msgData.userHost,
+          text: msgData.text,
+          timestamp: msgData.timestamp,
+        };
+
+        void nats.publish(broadcastSubject, JSON.stringify(broadcastMessage));
+        log.info('Published message to broadcast', {
+          producer: 'router',
+          broadcastUUID: broadcast.broadcastUUID,
+          user: msgData.user,
+          subject: broadcastSubject,
+        });
+      });
     } catch (err: unknown) {
       const error = err as Error;
       log.error('Failed to parse chat message', {
@@ -265,13 +300,52 @@ const commandRegisterSubscription = nats.subscribe(
 );
 natsSubscriptions.push(commandRegisterSubscription);
 
+// Subscribe to broadcast.register messages
+const broadcastRegisterSubscription = nats.subscribe(
+  'broadcast.register',
+  (subject, message) => {
+    try {
+      const registrationData = JSON.parse(
+        message.string()
+      ) as BroadcastRegistration;
+
+      if (registrationData.type !== 'broadcast.register') {
+        log.warn(
+          'Received non-broadcast.register message on broadcast.register subject',
+          {
+            producer: 'router',
+            subject: subject,
+            messageType: registrationData.type,
+          }
+        );
+        return;
+      }
+
+      broadcastRegistry.registerBroadcast(registrationData);
+      log.info('Processed broadcast registration', {
+        producer: 'router',
+        broadcastUUID: registrationData.broadcastUUID,
+      });
+    } catch (err: unknown) {
+      const error = err as Error;
+      log.error('Failed to process broadcast registration', {
+        producer: 'router',
+        subject: subject,
+        errorMessage: error.message,
+        rawMessage: message.string(),
+      });
+    }
+  }
+);
+natsSubscriptions.push(broadcastRegisterSubscription);
+
 // Subscribe to admin requests for rate limit statistics
 const adminRequestSub = nats.subscribe(
   'admin.request.router',
   (subject, message) => {
     try {
       const data = JSON.parse(message.string());
-      
+
       if (data.action === 'get-ratelimit-stats') {
         log.info('Received admin request for rate limit statistics', {
           producer: 'router',
@@ -289,7 +363,10 @@ const adminRequestSub = nats.subscribe(
           trace: data.trace,
         };
 
-        void nats.publish('admin.response.router.ratelimit-stats', JSON.stringify(responseMessage));
+        void nats.publish(
+          'admin.response.router.ratelimit-stats',
+          JSON.stringify(responseMessage)
+        );
 
         log.info('Sent rate limit statistics to admin module', {
           producer: 'router',
@@ -341,3 +418,6 @@ natsSubscriptions.push(statsUptimeSub);
 
 // Ask all modules to publish their commands
 void nats.publish('control.registerCommands', JSON.stringify({}));
+
+// Ask all modules to publish their broadcasts
+void nats.publish('control.registerBroadcasts', JSON.stringify({}));
