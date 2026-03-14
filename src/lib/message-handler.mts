@@ -252,84 +252,21 @@ export function handleChatMessage(
 
     // For each matching command, check rate limits and publish command execution message
     matchingCommands.forEach((command) => {
-      // Process the command text to strip prefix if needed and extract matched command
+      // Process the command text to extract args
+      // Since we already know this command matches from the registry, we just need to extract the args
       let processedText = msgData.text;
       let matchedCommand = '';
 
-      // Process prefixes in sequence - both can be applied
-      let processedTextForMatching = msgData.text;
-      let prefixText = '';
-
-      // Apply platform prefix if allowed
-      if (command.platformPrefixAllowed && msgData.commonPrefixRegex) {
-        try {
-          const prefixRegex = new RegExp(msgData.commonPrefixRegex);
-          const prefixMatch = processedTextForMatching.match(prefixRegex);
-          if (prefixMatch) {
-            // Extract the matched prefix
-            const matchedPrefix = prefixMatch[0];
-            // Remove the prefix from the command text
-            processedTextForMatching = processedTextForMatching
-              .slice(prefixMatch[0].length)
-              .trimStart();
-            prefixText += matchedPrefix;
-          }
-        } catch (error) {
-          // If the prefix regex is invalid, log an error but continue with original text
-          log.error('Invalid commonPrefixRegex, using original text', {
-            producer: 'router',
-            commonPrefixRegex: msgData.commonPrefixRegex,
-            error: (error as Error).message,
-          });
-        }
-      }
-
-      // Apply nick prefix if allowed (can work in combination with platform prefix)
-      if (command.nickPrefixAllowed && msgData.botNick) {
-        // Create a regex pattern to match the bot's nick followed by common separators
-        const nickPrefixPattern = new RegExp(`^${msgData.botNick}[:;, ]+`, 'i');
-        const nickMatch = processedTextForMatching.match(nickPrefixPattern);
-        if (nickMatch) {
-          // Extract the matched nick prefix
-          const matchedNickPrefix = nickMatch[0];
-          // Remove the nick prefix from the command text
-          processedTextForMatching = processedTextForMatching
-            .slice(nickMatch[0].length)
-            .trimStart();
-          prefixText += matchedNickPrefix;
-        }
-      }
-
-      // Now use the command regex to match the actual command and extract args
-      const commandMatch = processedTextForMatching.match(command.commandRegex);
+      // Find the command match in the original text to properly extract args
+      const commandMatch = msgData.text.match(command.commandRegex);
       if (commandMatch) {
-        // Update matchedCommand with the actual command that was matched plus the prefixes
-        matchedCommand = prefixText + commandMatch[0];
-        // Remove the matched command (prefixes + command) from the original text, leaving only args
+        matchedCommand = commandMatch[0];
+        // Remove the matched command from the text, leaving only args
         const textAfterCommand = msgData.text
-          .slice(matchedCommand.length)
+          .slice((commandMatch.index || 0) + commandMatch[0].length)
           .trimStart();
         // Update processedText with the remaining text (args)
         processedText = textAfterCommand;
-      } else if (prefixText) {
-        // If prefixes were matched but command didn't match, use the text without prefixes
-        processedText = processedTextForMatching;
-        // Set matchedCommand to just the prefixes since no command matched
-        matchedCommand = prefixText;
-      } else {
-        // If no prefixes were used, check if the command regex matches the full text
-        const directCommandMatch = msgData.text.match(command.commandRegex);
-        if (directCommandMatch) {
-          matchedCommand = directCommandMatch[0];
-          // Remove the matched command from the text, leaving only args
-          const textAfterCommand = msgData.text
-            .slice(
-              (directCommandMatch.index || 0) + directCommandMatch[0].length
-            )
-            .trimStart();
-          // Update processedText with the remaining text (args)
-          processedText = textAfterCommand;
-        }
       }
 
       // Check rate limits

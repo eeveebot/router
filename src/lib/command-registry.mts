@@ -197,9 +197,6 @@ export class CommandRegistry {
 
       // Process text for prefix matching - both prefixes can be applied in sequence
       let textToMatch = commandText;
-
-      // Track if we successfully applied any required prefixes
-      let prefixApplied = false;
       
       // Apply platform prefix if allowed
       if (cmd.platformPrefixAllowed && commonPrefixRegex) {
@@ -209,7 +206,6 @@ export class CommandRegistry {
           if (match) {
             // Remove the prefix from the command text for matching
             textToMatch = textToMatch.slice(match[0].length).trim();
-            prefixApplied = true;
           }
         } catch (error) {
           // If the prefix regex is invalid, log an error but continue with original text
@@ -229,15 +225,18 @@ export class CommandRegistry {
         if (nickMatch) {
           // Remove the nick prefix from the command text for matching
           textToMatch = textToMatch.slice(nickMatch[0].length).trim();
-          prefixApplied = true;
         }
       }
 
-      if (prefixApplied) {
-        // Finally, check if the command regex matches the (possibly modified) text
+      // Check if the command regex matches the text
+      // If the command allows prefixes, match against the possibly stripped text
+      // Otherwise, match against the original text
+      if (cmd.platformPrefixAllowed || cmd.nickPrefixAllowed) {
+        // For commands that allow prefixes, we match against the possibly stripped text
         return cmd.commandRegex.test(textToMatch);
       } else {
-        return false;
+        // For commands that don't allow prefixes, match against the original text
+        return cmd.commandRegex.test(commandText);
       }
     });
   }
