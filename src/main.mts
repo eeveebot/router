@@ -9,11 +9,46 @@ import { CommandRegistry } from './lib/command-registry.mjs';
 import { CommandRegistration } from './types/command.mjs';
 import { RateLimiter } from './lib/rate-limiter.mjs';
 
+// Record module startup time for uptime tracking
+const moduleStartTime = Date.now();
+
 export { rateLimiter };
 
 const natsClients: InstanceType<typeof NatsClient>[] = [];
 const natsSubscriptions: Array<Promise<string | boolean>> = [];
+
+
+//
+// Setup NATS connection
+
+// Get host and token
+const natsHost = process.env.NATS_HOST || false;
+if (!natsHost) {
+  const msg = 'environment variable NATS_HOST is not set.';
+  throw new Error(msg);
+}
+
+const natsToken = process.env.NATS_TOKEN || false;
+if (!natsToken) {
+  const msg = 'environment variable NATS_TOKEN is not set.';
+  throw new Error(msg);
+}
+
+const nats = new NatsClient({
+  natsHost: natsHost as string,
+  natsToken: natsToken as string,
+});
+natsClients.push(nats);
+await nats.connect();
+
+
+const commandRegistry = new CommandRegistry(nats);
+
+
 const rateLimiter = new RateLimiter(commandRegistry);
+
+// Set the NATS client for the rate limiter
+rateLimiter.setNatsClient(nats);
 
 // Periodically process the command queue
 setInterval(() => {
@@ -40,34 +75,6 @@ process.on('SIGTERM', () => {
     void natsClient.drain();
   });
 });
-
-//
-// Setup NATS connection
-
-// Get host and token
-const natsHost = process.env.NATS_HOST || false;
-if (!natsHost) {
-  const msg = 'environment variable NATS_HOST is not set.';
-  throw new Error(msg);
-}
-
-const natsToken = process.env.NATS_TOKEN || false;
-if (!natsToken) {
-  const msg = 'environment variable NATS_TOKEN is not set.';
-  throw new Error(msg);
-}
-
-const nats = new NatsClient({
-  natsHost: natsHost as string,
-  natsToken: natsToken as string,
-});
-natsClients.push(nats);
-await nats.connect();
-
-// Set the NATS client for the rate limiter
-rateLimiter.setNatsClient(nats);
-
-const commandRegistry = new CommandRegistry(nats);
 
 // Subscribe to chat.message.incoming.* messages
 const chatMessageSubscription = nats.subscribe(
@@ -300,6 +307,37 @@ const adminRequestSub = nats.subscribe(
   }
 );
 natsSubscriptions.push(adminRequestSub);
+
+// Subscribe to stats.uptime messages and respond with module uptime
+const statsUptimeSub = nats.subscribe('stats.uptime', (subject, message) => {
+  try {
+    const data = JSON.parse(message.string());
+    log.info('Received stats.uptime request', {
+      producer: 'router',
+      replyChannel: data.replyChannel,
+    });
+
+    // Calculate uptime in milliseconds
+    const uptime = Date.now() - moduleStartTime;
+
+    // Send uptime back via the ephemeral reply channel
+    const uptimeResponse = {
+      module: 'router',
+      uptime: uptime,
+      uptimeFormatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
+    };
+
+    if (data.replyChannel) {
+      void nats.publish(data.replyChannel, JSON.stringify(uptimeResponse));
+    }
+  } catch (error) {
+    log.error('Failed to process stats.uptime request', {
+      producer: 'router',
+      error: error,
+    });
+  }
+});
+natsSubscriptions.push(statsUptimeSub);
 
 // Ask all modules to publish their commands
 void nats.publish('control.registerCommands', JSON.stringify({}));
