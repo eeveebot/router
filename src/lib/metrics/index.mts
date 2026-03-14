@@ -17,7 +17,13 @@ export const messageProcessingTime = new Histogram({
 export const commandCounter = new Counter({
   name: 'router_commands_total',
   help: 'Total number of commands processed',
-  labelNames: ['command_uuid', 'platform', 'network', 'channel', 'rate_limit_action'],
+  labelNames: [
+    'command_uuid',
+    'platform',
+    'network',
+    'channel',
+    'rate_limit_action',
+  ],
 });
 
 export const commandProcessingTime = new Histogram({

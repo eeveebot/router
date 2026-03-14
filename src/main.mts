@@ -160,7 +160,7 @@ const chatMessageSubscription = nats.subscribe(
             const prefixMatch = msgData.text.match(prefixRegex);
             if (prefixMatch) {
               // Extract the matched prefix
-              matchedCommand = prefixMatch[0].trim();
+              const matchedPrefix = prefixMatch[0].trim();
               // Remove the prefix from the command text
               const textWithoutPrefix = msgData.text
                 .slice(prefixMatch[0].length)
@@ -171,8 +171,8 @@ const chatMessageSubscription = nats.subscribe(
                 command.commandRegex
               );
               if (commandMatch) {
-                // Update matchedCommand with the actual command that was matched
-                matchedCommand = commandMatch[0].trim();
+                // Update matchedCommand with the actual command that was matched plus the prefix
+                matchedCommand = matchedPrefix + commandMatch[0].trim();
                 // Remove the matched command from the text, leaving only args
                 const textAfterCommand = textWithoutPrefix
                   .slice(commandMatch[0].length)
@@ -182,6 +182,8 @@ const chatMessageSubscription = nats.subscribe(
               } else {
                 // If command doesn't match, use the text without prefix
                 processedText = textWithoutPrefix;
+                // Set matchedCommand to just the prefix since no command matched
+                matchedCommand = matchedPrefix;
               }
             }
           } catch (error) {
@@ -191,6 +193,18 @@ const chatMessageSubscription = nats.subscribe(
               commonPrefixRegex: msgData.commonPrefixRegex,
               error: (error as Error).message,
             });
+          }
+        } else {
+          // If no prefix is used, check if the command regex matches the full text
+          const commandMatch = msgData.text.match(command.commandRegex);
+          if (commandMatch) {
+            matchedCommand = commandMatch[0].trim();
+            // Remove the matched command from the text, leaving only args
+            const textAfterCommand = msgData.text
+              .slice(commandMatch[0].length)
+              .trim();
+            // Update processedText with the remaining text (args)
+            processedText = textAfterCommand;
           }
         }
 
@@ -335,7 +349,7 @@ const chatMessageSubscription = nats.subscribe(
         errorMessage: error.message,
         rawMessage: message.string(),
       });
-      
+
       // Increment error counter
       messageCounter.inc({
         platform: 'unknown',
@@ -383,7 +397,7 @@ const commandRegisterSubscription = nats.subscribe(
         producer: 'router',
         commandUUID: registrationData.commandUUID,
       });
-      
+
       // Record successful registration
       registrationCounter.inc({
         type: 'command',
@@ -397,7 +411,7 @@ const commandRegisterSubscription = nats.subscribe(
         errorMessage: error.message,
         rawMessage: message.string(),
       });
-      
+
       // Record registration error
       registrationCounter.inc({
         type: 'command',
@@ -441,7 +455,7 @@ const broadcastRegisterSubscription = nats.subscribe(
         producer: 'router',
         broadcastUUID: registrationData.broadcastUUID,
       });
-      
+
       // Record successful registration
       registrationCounter.inc({
         type: 'broadcast',
@@ -455,7 +469,7 @@ const broadcastRegisterSubscription = nats.subscribe(
         errorMessage: error.message,
         rawMessage: message.string(),
       });
-      
+
       // Record registration error
       registrationCounter.inc({
         type: 'broadcast',
