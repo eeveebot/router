@@ -232,16 +232,13 @@ export class CommandRegistry {
           prefixApplied = true;
         }
       }
-      
-      // If prefixes are allowed but none were applied, use original text
-      // This handles cases where a command allows prefixes but the message doesn't have them
-      if (!prefixApplied && (cmd.platformPrefixAllowed || cmd.nickPrefixAllowed)) {
-        // For commands that allow prefixes, we still need to check the full text
-        textToMatch = commandText;
-      }
 
-      // Finally, check if the command regex matches the (possibly modified) text
-      return cmd.commandRegex.test(textToMatch);
+      if (prefixApplied) {
+        // Finally, check if the command regex matches the (possibly modified) text
+        return cmd.commandRegex.test(textToMatch);
+      } else {
+        return false;
+      }
     });
   }
 }

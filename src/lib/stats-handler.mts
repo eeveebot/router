@@ -28,12 +28,17 @@ export async function handleStatsEmitRequest(
     // Get all prom-client metrics
     const prometheusMetrics = await register.metrics();
 
+    // Get memory usage information
+    const memoryUsage = process.memoryUsage();
+    
     // Send stats back via the ephemeral reply channel
     const statsResponse = {
       module: 'router',
       stats: {
         uptime_seconds: Math.floor(uptime / 1000),
         uptime_formatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
+        memory_rss_mb: Math.round(memoryUsage.rss / (1024 * 1024)),
+        memory_heap_used_mb: Math.round(memoryUsage.heapUsed / (1024 * 1024)),
         prometheus_metrics: prometheusMetrics,
       },
     };
