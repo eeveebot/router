@@ -1,0 +1,39 @@
+# Router configuration file
+
+blocklist:
+  # Example spam patterns
+  - pattern: ".*spam.*"
+    enabled: true
+    description: "Block messages containing the word spam"
+    platform: ".*"  # Apply to all platforms
+
+  - pattern: ".*advertisement.*"
+    enabled: true
+    description: "Block messages containing the word advertisement"
+    platform: ".*"  # Apply to all platforms
+
+  - pattern: ".*buy now.*"
+    enabled: true
+    description: "Block messages with 'buy now' phrases"
+    platform: "irc"  # Only apply to IRC platform
+
+  # Example with more specific targeting
+  - pattern: ".*test spam.*"
+    enabled: true
+    description: "Block specific spam in specific channels"
+    platform: "irc"
+    network: "libera"
+    channel: "#bots"
+
+  # Example: Ignore all messages from a specific user on Discord
+  - pattern: ".*"
+    enabled: true
+    description: "Ignore all messages from a specific user on Discord"
+    platform: "discord"
+    user: "annoying-user.*"
+
+  # Disabled entry example
+  # - pattern: ".*test.*"
+  #   enabled: false
+  #   description: "Disabled blocklist entry for testing"
+  #   platform: ".*"
