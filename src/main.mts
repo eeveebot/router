@@ -773,32 +773,54 @@ const adminRequestSub = nats.subscribe(
           // Get command registry information
           const registry = commandRegistry.getAllCommands();
 
+          // Sanitize the registry data to remove circular references and non-serializable objects
+          const sanitizedRegistry = registry.map(command => ({
+            commandUUID: command.commandUUID,
+            commandDisplayName: command.commandDisplayName,
+            platformRegex: {
+              source: command.platformRegex.source
+            },
+            networkRegex: {
+              source: command.networkRegex.source
+            },
+            instanceRegex: {
+              source: command.instanceRegex.source
+            },
+            channelRegex: {
+              source: command.channelRegex.source
+            },
+            userRegex: {
+              source: command.userRegex.source
+            },
+            commandRegex: {
+              source: command.commandRegex.source
+            },
+            platformPrefixAllowed: command.platformPrefixAllowed,
+            nickPrefixAllowed: command.nickPrefixAllowed,
+            ratelimit: command.ratelimit,
+            ttl: command.ttl,
+            registeredAt: command.registeredAt,
+            expiresAt: command.expiresAt
+            // Exclude timers and other non-serializable properties
+          }));
+
           // Send response back to admin module
           const responseMessage = {
             action: 'command-registry',
-            registry: registry,
+            registry: sanitizedRegistry,
             requester: data.requester,
             trace: data.trace,
           };
 
-        try {
           void nats.publish(
             'admin.response.router.command-registry',
             JSON.stringify(responseMessage)
           );
-        } catch (publishError) {
-          log.error('Failed to publish command registry response', {
-            producer: 'router',
-            trace: data.trace,
-            error: publishError instanceof Error ? publishError.message : String(publishError),
-            stack: publishError instanceof Error ? publishError.stack : undefined,
-          });
-        }
 
           log.info('Sent command registry to admin module', {
             producer: 'router',
             trace: data.trace,
-            entryCount: registry.length,
+            entryCount: sanitizedRegistry.length,
           });
         } catch (registryError) {
           log.error('Failed to generate command registry', {
