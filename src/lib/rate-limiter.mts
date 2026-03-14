@@ -91,11 +91,17 @@ export class RateLimiter {
     let identifier: string;
 
     switch (level) {
+      case 'platform':
+        identifier = `${platform}`;
+        break;
+      case 'instance':
+        identifier = `${platform}:${instance}`;
+        break;
       case 'channel':
-        identifier = `${platform}:${network}:${instance}:${channel}`;
+        identifier = `${platform}:${instance}:${channel}`;
         break;
       case 'user':
-        identifier = `${platform}:${network}:${instance}:${user}`;
+        identifier = `${platform}:${instance}:${user}`;
         break;
       case 'global':
         identifier = 'global';

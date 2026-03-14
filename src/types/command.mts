@@ -1,6 +1,6 @@
 export interface RateLimitConfig {
   mode: 'enqueue' | 'drop';
-  level: 'channel' | 'user' | 'global';
+  level: 'platform' | 'instance' | 'channel' | 'user' | 'global';
   limit: number;
   interval: string; // e.g., "30s", "1m", "5m"
 }
