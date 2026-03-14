@@ -57,8 +57,8 @@ export class CommandRegistry {
   registerCommand(registration: CommandRegistration): void {
     try {
       const now = Date.now();
-      // Use provided TTL or default to 120000ms (2 minutes)
-      const ttl = registration.ttl ?? 120000;
+      // Use provided TTL or default to 600000ms (10 minutes)
+      const ttl = registration.ttl ?? 600000;
 
       // If command already exists, clear its existing timers
       const existingCommand = this.commands.get(registration.commandUUID);
