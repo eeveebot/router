@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@eeveebot/libeevee": "^1.2.11",
+    "express": "^5.2.1",
     "irc-framework": "^4.14.0",
     "js-yaml": "^4.1.1",
     "nats": "^2.29.3",
