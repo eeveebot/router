@@ -430,7 +430,7 @@ const chatMessageSubscription = nats.subscribe(
               matchedCommand = commandMatch[0];
               // Remove the matched command from the text, leaving only args
               const textAfterCommand = msgData.text
-                .slice(commandMatch[0].length)
+                .slice((commandMatch.index || 0) + commandMatch[0].length)
                 .trimStart();
               // Update processedText with the remaining text (args)
               processedText = textAfterCommand;
@@ -443,7 +443,7 @@ const chatMessageSubscription = nats.subscribe(
             matchedCommand = commandMatch[0];
             // Remove the matched command from the text, leaving only args
             const textAfterCommand = msgData.text
-              .slice(commandMatch[0].length)
+              .slice((commandMatch.index || 0) + commandMatch[0].length)
               .trimStart();
             // Update processedText with the remaining text (args)
             processedText = textAfterCommand;
