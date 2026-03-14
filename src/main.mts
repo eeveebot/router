@@ -769,33 +769,74 @@ const adminRequestSub = nats.subscribe(
           trace: data.trace,
         });
 
-        // Get command registry information
-        const registry = commandRegistry.getAllCommands();
+        try {
+          // Get command registry information
+          const registry = commandRegistry.getAllCommands();
 
-        // Send response back to admin module
-        const responseMessage = {
-          action: 'command-registry',
-          registry: registry,
-          requester: data.requester,
-          trace: data.trace,
-        };
+          // Send response back to admin module
+          const responseMessage = {
+            action: 'command-registry',
+            registry: registry,
+            requester: data.requester,
+            trace: data.trace,
+          };
 
-        void nats.publish(
-          'admin.response.router.command-registry',
-          JSON.stringify(responseMessage)
-        );
+        try {
+          void nats.publish(
+            'admin.response.router.command-registry',
+            JSON.stringify(responseMessage)
+          );
+        } catch (publishError) {
+          log.error('Failed to publish command registry response', {
+            producer: 'router',
+            trace: data.trace,
+            error: publishError instanceof Error ? publishError.message : String(publishError),
+            stack: publishError instanceof Error ? publishError.stack : undefined,
+          });
+        }
 
-        log.info('Sent command registry to admin module', {
-          producer: 'router',
-          trace: data.trace,
-          entryCount: registry.length,
-        });
+          log.info('Sent command registry to admin module', {
+            producer: 'router',
+            trace: data.trace,
+            entryCount: registry.length,
+          });
+        } catch (registryError) {
+          log.error('Failed to generate command registry', {
+            producer: 'router',
+            trace: data.trace,
+            error: registryError instanceof Error ? registryError.message : String(registryError),
+            stack: registryError instanceof Error ? registryError.stack : undefined,
+          });
+          
+          // Send error response back to admin module
+          const errorMessage = {
+            action: 'command-registry-error',
+            error: 'Failed to retrieve command registry',
+            requester: data.requester,
+            trace: data.trace,
+          };
+
+          try {
+            void nats.publish(
+              'admin.response.router.command-registry',
+              JSON.stringify(errorMessage)
+            );
+          } catch (publishError) {
+            log.error('Failed to publish command registry error response', {
+              producer: 'router',
+              trace: data.trace,
+              error: publishError instanceof Error ? publishError.message : String(publishError),
+              stack: publishError instanceof Error ? publishError.stack : undefined,
+            });
+          }
+        }
       }
     } catch (error) {
       log.error('Failed to process admin request', {
         producer: 'router',
         message: message.string(),
-        error: error,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
       });
     }
   }

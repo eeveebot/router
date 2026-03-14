@@ -151,7 +151,16 @@ export class CommandRegistry {
   }
 
   getAllCommands(): RegisteredCommand[] {
-    return Array.from(this.commands.values());
+    try {
+      return Array.from(this.commands.values());
+    } catch (error) {
+      log.error('Failed to get all commands from registry', {
+        producer: 'router',
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      return [];
+    }
   }
 
   getCommandDisplayName(commandUUID: string): string | undefined {
