@@ -1,6 +1,7 @@
 import { RateLimitConfig } from '../types/command.mjs';
 import { log } from '@eeveebot/libeevee';
 import { NatsClient } from '@eeveebot/libeevee';
+import { PlatformNotifier } from './notifier.mjs';
 
 interface RateLimitState {
   count: number;
@@ -26,6 +27,15 @@ export class RateLimiter {
   private limits: Map<string, RateLimitState> = new Map();
   private commandQueue: QueuedCommand[] = [];
   private processingQueue = false;
+  private notifier: PlatformNotifier;
+
+  constructor() {
+    this.notifier = new PlatformNotifier();
+  }
+
+  public setNatsClient(nats: InstanceType<typeof NatsClient>): void {
+    this.notifier.setNatsClient(nats);
+  }
 
   private getKey(
     commandUUID: string,
@@ -136,7 +146,22 @@ export class RateLimiter {
       limit: ratelimit.limit,
       interval: ratelimit.interval,
       identifier: key.split(':')[1],
+      platform: platform,
+      network: network,
+      instance: instance,
+      channel: channel,
+      user: user,
     });
+
+    // Send a notification to the user informing them they are rate-limited
+    void this.notifier.notifyUser(
+      platform,
+      network,
+      instance,
+      channel,
+      user,
+      'You are being rate-limited. Please wait before sending more commands.'
+    );
 
     return false;
   }

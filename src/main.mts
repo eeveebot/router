@@ -62,6 +62,9 @@ const nats = new NatsClient({
 natsClients.push(nats);
 await nats.connect();
 
+// Set the NATS client for the rate limiter
+rateLimiter.setNatsClient(nats);
+
 const commandRegistry = new CommandRegistry(nats);
 
 // Subscribe to chat.message.incoming.* messages
