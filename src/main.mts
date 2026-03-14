@@ -157,7 +157,7 @@ natsSubscribeCounter.inc({ subject: 'admin.request.router' });
 const statsEmitRequestSub = nats.subscribe(
   'stats.emit.request',
   (subject, message) => {
-    handleStatsEmitRequest(subject, message, nats);
+    void handleStatsEmitRequest(subject, message, nats);
   }
 );
 

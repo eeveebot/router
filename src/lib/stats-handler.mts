@@ -1,4 +1,5 @@
 import { log } from '@eeveebot/libeevee';
+import { register } from 'prom-client';
 
 // Record module startup time for uptime tracking
 const moduleStartTime = Date.now();
@@ -9,11 +10,11 @@ const moduleStartTime = Date.now();
  * @param message The message content
  * @param nats The NATS client instance
  */
-export function handleStatsEmitRequest(
+export async function handleStatsEmitRequest(
   subject: string,
   message: { string: () => string },
   nats: { publish: (subject: string, data: string) => Promise<boolean> }
-): void {
+): Promise<void> {
   try {
     const data = JSON.parse(message.string());
     log.info('Received stats.emit.request', {
@@ -24,13 +25,16 @@ export function handleStatsEmitRequest(
     // Calculate uptime in milliseconds
     const uptime = Date.now() - moduleStartTime;
 
+    // Get all prom-client metrics
+    const prometheusMetrics = await register.metrics();
+
     // Send stats back via the ephemeral reply channel
     const statsResponse = {
       module: 'router',
       stats: {
         uptime_seconds: Math.floor(uptime / 1000),
         uptime_formatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
-        // TODO: Add more detailed stats from prom-client metrics
+        prometheus_metrics: prometheusMetrics,
       },
     };
 
