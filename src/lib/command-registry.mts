@@ -198,6 +198,9 @@ export class CommandRegistry {
       // Process text for prefix matching - both prefixes can be applied in sequence
       let textToMatch = commandText;
 
+      // Track if we successfully applied any required prefixes
+      let prefixApplied = false;
+      
       // Apply platform prefix if allowed
       if (cmd.platformPrefixAllowed && commonPrefixRegex) {
         try {
@@ -206,9 +209,7 @@ export class CommandRegistry {
           if (match) {
             // Remove the prefix from the command text for matching
             textToMatch = textToMatch.slice(match[0].length).trim();
-          } else {
-            // If prefix is required but not found, this command doesn't match
-            return false;
+            prefixApplied = true;
           }
         } catch (error) {
           // If the prefix regex is invalid, log an error but continue with original text
@@ -220,7 +221,7 @@ export class CommandRegistry {
         }
       }
 
-      // Apply nick prefix if allowed (can work in combination with platform prefix)
+      // Apply nick prefix if allowed
       if (cmd.nickPrefixAllowed && botNick) {
         // Create a regex pattern to match the bot's nick followed by common separators
         const nickPrefixPattern = new RegExp(`^${botNick}[:;, ]+`, 'i');
@@ -228,7 +229,15 @@ export class CommandRegistry {
         if (nickMatch) {
           // Remove the nick prefix from the command text for matching
           textToMatch = textToMatch.slice(nickMatch[0].length).trim();
+          prefixApplied = true;
         }
+      }
+      
+      // If prefixes are allowed but none were applied, use original text
+      // This handles cases where a command allows prefixes but the message doesn't have them
+      if (!prefixApplied && (cmd.platformPrefixAllowed || cmd.nickPrefixAllowed)) {
+        // For commands that allow prefixes, we still need to check the full text
+        textToMatch = commandText;
       }
 
       // Finally, check if the command regex matches the (possibly modified) text
