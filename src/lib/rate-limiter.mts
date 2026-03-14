@@ -6,6 +6,8 @@ import { PlatformNotifier } from './notifier.mjs';
 interface RateLimitState {
   count: number;
   lastReset: number;
+  limit: number;
+  interval: string;
 }
 
 interface QueuedCommand {
@@ -35,6 +37,20 @@ export class RateLimiter {
 
   public setNatsClient(nats: InstanceType<typeof NatsClient>): void {
     this.notifier.setNatsClient(nats);
+  }
+
+  public getStats(): Record<string, { count: number; limit: number; interval: string }> {
+    const stats: Record<string, { count: number; limit: number; interval: string }> = {};
+    
+    for (const [key, state] of this.limits.entries()) {
+      stats[key] = {
+        count: state.count,
+        limit: state.limit,
+        interval: state.interval
+      };
+    }
+    
+    return stats;
   }
 
   private getKey(
@@ -121,6 +137,8 @@ export class RateLimiter {
       state = {
         count: 0,
         lastReset: now,
+        limit: ratelimit.limit,
+        interval: ratelimit.interval,
       };
       this.limits.set(key, state);
     }

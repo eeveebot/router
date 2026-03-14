@@ -9,6 +9,8 @@ import { CommandRegistry } from './lib/command-registry.mjs';
 import { CommandRegistration } from './types/command.mjs';
 import { RateLimiter } from './lib/rate-limiter.mjs';
 
+export { rateLimiter };
+
 const natsClients: InstanceType<typeof NatsClient>[] = [];
 const natsSubscriptions: Array<Promise<string | boolean>> = [];
 const rateLimiter = new RateLimiter();
@@ -255,6 +257,49 @@ const commandRegisterSubscription = nats.subscribe(
   }
 );
 natsSubscriptions.push(commandRegisterSubscription);
+
+// Subscribe to admin requests for rate limit statistics
+const adminRequestSub = nats.subscribe(
+  'admin.request.router',
+  (subject, message) => {
+    try {
+      const data = JSON.parse(message.string());
+      
+      if (data.action === 'get-ratelimit-stats') {
+        log.info('Received admin request for rate limit statistics', {
+          producer: 'router',
+          trace: data.trace,
+        });
+
+        // Get rate limit statistics
+        const stats = rateLimiter.getStats();
+
+        // Send response back to admin module
+        const responseMessage = {
+          action: 'ratelimit-stats',
+          stats: stats,
+          requester: data.requester,
+          trace: data.trace,
+        };
+
+        void nats.publish('admin.response.router.ratelimit-stats', JSON.stringify(responseMessage));
+
+        log.info('Sent rate limit statistics to admin module', {
+          producer: 'router',
+          trace: data.trace,
+          entryCount: Object.keys(stats).length,
+        });
+      }
+    } catch (error) {
+      log.error('Failed to process admin request', {
+        producer: 'router',
+        message: message.string(),
+        error: error,
+      });
+    }
+  }
+);
+natsSubscriptions.push(adminRequestSub);
 
 // Ask all modules to publish their commands
 void nats.publish('control.registerCommands', JSON.stringify({}));
