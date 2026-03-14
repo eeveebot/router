@@ -160,11 +160,11 @@ const chatMessageSubscription = nats.subscribe(
             const prefixMatch = msgData.text.match(prefixRegex);
             if (prefixMatch) {
               // Extract the matched prefix
-              const matchedPrefix = prefixMatch[0].trim();
+              const matchedPrefix = prefixMatch[0];
               // Remove the prefix from the command text
               const textWithoutPrefix = msgData.text
                 .slice(prefixMatch[0].length)
-                .trim();
+                .trimStart();
 
               // Now use the command regex to match the actual command and extract args
               const commandMatch = textWithoutPrefix.match(
@@ -172,11 +172,11 @@ const chatMessageSubscription = nats.subscribe(
               );
               if (commandMatch) {
                 // Update matchedCommand with the actual command that was matched plus the prefix
-                matchedCommand = matchedPrefix + commandMatch[0].trim();
-                // Remove the matched command from the text, leaving only args
-                const textAfterCommand = textWithoutPrefix
-                  .slice(commandMatch[0].length)
-                  .trim();
+                matchedCommand = matchedPrefix + commandMatch[0];
+                // Remove the matched command (prefix + command) from the original text, leaving only args
+                const textAfterCommand = msgData.text
+                  .slice(matchedCommand.length)
+                  .trimStart();
                 // Update processedText with the remaining text (args)
                 processedText = textAfterCommand;
               } else {
@@ -198,11 +198,11 @@ const chatMessageSubscription = nats.subscribe(
           // If no prefix is used, check if the command regex matches the full text
           const commandMatch = msgData.text.match(command.commandRegex);
           if (commandMatch) {
-            matchedCommand = commandMatch[0].trim();
+            matchedCommand = commandMatch[0];
             // Remove the matched command from the text, leaving only args
             const textAfterCommand = msgData.text
               .slice(commandMatch[0].length)
-              .trim();
+              .trimStart();
             // Update processedText with the remaining text (args)
             processedText = textAfterCommand;
           }
