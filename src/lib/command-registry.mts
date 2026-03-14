@@ -77,6 +77,7 @@ export class CommandRegistry {
         userRegex: new RegExp(registration.user),
         commandRegex: new RegExp(registration.regex),
         platformPrefixAllowed: registration.platformPrefixAllowed,
+        nickPrefixAllowed: registration.nickPrefixAllowed,
         ratelimit: registration.ratelimit,
         ttl: ttl,
         registeredAt: now,
@@ -165,7 +166,8 @@ export class CommandRegistry {
     channel: string,
     user: string,
     commandText: string,
-    commonPrefixRegex?: string
+    commonPrefixRegex?: string,
+    botNick?: string
   ): RegisteredCommand[] {
     return Array.from(this.commands.values()).filter((cmd) => {
       // First check if command has expired
@@ -205,6 +207,18 @@ export class CommandRegistry {
             commonPrefixRegex: commonPrefixRegex,
             error: (error as Error).message,
           });
+        }
+      }
+
+      // If nickPrefixAllowed is true and botNick is provided,
+      // check if the command text starts with the bot's nick followed by a separator
+      if (cmd.nickPrefixAllowed && botNick) {
+        // Create a regex pattern to match the bot's nick followed by common separators
+        const nickPrefixPattern = new RegExp(`^${botNick}[:;, ]+`, 'i');
+        const nickMatch = commandText.match(nickPrefixPattern);
+        if (nickMatch) {
+          // Remove the nick prefix from the command text for matching
+          textToMatch = commandText.slice(nickMatch[0].length).trim();
         }
       }
 

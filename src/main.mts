@@ -135,7 +135,8 @@ const chatMessageSubscription = nats.subscribe(
         msgData.channel,
         msgData.user,
         msgData.text,
-        msgData.commonPrefixRegex
+        msgData.commonPrefixRegex,
+        msgData.botNick
       );
 
       // Check if this message matches any registered broadcasts
@@ -154,6 +155,7 @@ const chatMessageSubscription = nats.subscribe(
         let processedText = msgData.text;
         let matchedCommand = '';
 
+        // Check for platform prefix first
         if (command.platformPrefixAllowed && msgData.commonPrefixRegex) {
           try {
             const prefixRegex = new RegExp(msgData.commonPrefixRegex);
@@ -193,6 +195,52 @@ const chatMessageSubscription = nats.subscribe(
               commonPrefixRegex: msgData.commonPrefixRegex,
               error: (error as Error).message,
             });
+          }
+        }
+        // Check for nick prefix if platform prefix wasn't matched
+        else if (command.nickPrefixAllowed && msgData.botNick) {
+          // Create a regex pattern to match the bot's nick followed by common separators
+          const nickPrefixPattern = new RegExp(`^${msgData.botNick}[:;, ]+`, 'i');
+          const nickMatch = msgData.text.match(nickPrefixPattern);
+          if (nickMatch) {
+            // Extract the matched nick prefix
+            const matchedNickPrefix = nickMatch[0];
+            // Remove the nick prefix from the command text
+            const textWithoutNickPrefix = msgData.text
+              .slice(nickMatch[0].length)
+              .trimStart();
+
+            // Now use the command regex to match the actual command and extract args
+            const commandMatch = textWithoutNickPrefix.match(
+              command.commandRegex
+            );
+            if (commandMatch) {
+              // Update matchedCommand with the actual command that was matched plus the nick prefix
+              matchedCommand = matchedNickPrefix + commandMatch[0];
+              // Remove the matched command (nick prefix + command) from the original text, leaving only args
+              const textAfterCommand = msgData.text
+                .slice(matchedCommand.length)
+                .trimStart();
+              // Update processedText with the remaining text (args)
+              processedText = textAfterCommand;
+            } else {
+              // If command doesn't match, use the text without nick prefix
+              processedText = textWithoutNickPrefix;
+              // Set matchedCommand to just the nick prefix since no command matched
+              matchedCommand = matchedNickPrefix;
+            }
+          } else {
+            // If no nick prefix is used, check if the command regex matches the full text
+            const commandMatch = msgData.text.match(command.commandRegex);
+            if (commandMatch) {
+              matchedCommand = commandMatch[0];
+              // Remove the matched command from the text, leaving only args
+              const textAfterCommand = msgData.text
+                .slice(commandMatch[0].length)
+                .trimStart();
+              // Update processedText with the remaining text (args)
+              processedText = textAfterCommand;
+            }
           }
         } else {
           // If no prefix is used, check if the command regex matches the full text

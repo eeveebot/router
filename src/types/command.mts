@@ -16,6 +16,7 @@ export interface CommandRegistration {
   user: string; // regex pattern
   regex: string; // regex pattern for the command itself
   platformPrefixAllowed: boolean;
+  nickPrefixAllowed?: boolean; // Whether the bot's nick can be used as a prefix
   ratelimit: RateLimitConfig;
   ttl?: number; // Time-to-live in milliseconds (optional)
 }
@@ -35,6 +36,7 @@ export interface RegisteredCommand {
   userRegex: RegExp;
   commandRegex: RegExp;
   platformPrefixAllowed: boolean;
+  nickPrefixAllowed?: boolean; // Whether the bot's nick can be used as a prefix
   ratelimit: RateLimitConfig;
   ttl: number; // Time-to-live in milliseconds
   registeredAt: number; // Timestamp when the command was registered
