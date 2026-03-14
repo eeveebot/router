@@ -195,16 +195,17 @@ export class CommandRegistry {
         return false;
       }
 
-      // If platformPrefixAllowed is true and a commonPrefixRegex is provided,
-      // check if the command text matches it and extract the actual command part
+      // Process text for prefix matching - both prefixes can be applied in sequence
       let textToMatch = commandText;
+
+      // Apply platform prefix if allowed
       if (cmd.platformPrefixAllowed && commonPrefixRegex) {
         try {
           const prefixRegex = new RegExp(commonPrefixRegex);
-          const match = commandText.match(prefixRegex);
+          const match = textToMatch.match(prefixRegex);
           if (match) {
             // Remove the prefix from the command text for matching
-            textToMatch = commandText.slice(match[0].length).trim();
+            textToMatch = textToMatch.slice(match[0].length).trim();
           } else {
             // If prefix is required but not found, this command doesn't match
             return false;
@@ -219,16 +220,14 @@ export class CommandRegistry {
         }
       }
 
-      // If nickPrefixAllowed is true and botNick is provided,
-      // check if the command text starts with the bot's nick followed by a separator
-      // Only apply this if we haven't already stripped a platform prefix
-      if (cmd.nickPrefixAllowed && botNick && textToMatch === commandText) {
+      // Apply nick prefix if allowed (can work in combination with platform prefix)
+      if (cmd.nickPrefixAllowed && botNick) {
         // Create a regex pattern to match the bot's nick followed by common separators
         const nickPrefixPattern = new RegExp(`^${botNick}[:;, ]+`, 'i');
-        const nickMatch = commandText.match(nickPrefixPattern);
+        const nickMatch = textToMatch.match(nickPrefixPattern);
         if (nickMatch) {
           // Remove the nick prefix from the command text for matching
-          textToMatch = commandText.slice(nickMatch[0].length).trim();
+          textToMatch = textToMatch.slice(nickMatch[0].length).trim();
         }
       }
 

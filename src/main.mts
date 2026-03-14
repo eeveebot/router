@@ -346,41 +346,23 @@ const chatMessageSubscription = nats.subscribe(
         let processedText = msgData.text;
         let matchedCommand = '';
 
-        // Check for platform prefix
-        let prefixStripped = false;
+        // Process prefixes in sequence - both can be applied
+        let processedTextForMatching = msgData.text;
+        let prefixText = '';
+
+        // Apply platform prefix if allowed
         if (command.platformPrefixAllowed && msgData.commonPrefixRegex) {
           try {
             const prefixRegex = new RegExp(msgData.commonPrefixRegex);
-            const prefixMatch = msgData.text.match(prefixRegex);
+            const prefixMatch = processedTextForMatching.match(prefixRegex);
             if (prefixMatch) {
               // Extract the matched prefix
               const matchedPrefix = prefixMatch[0];
               // Remove the prefix from the command text
-              const textWithoutPrefix = msgData.text
+              processedTextForMatching = processedTextForMatching
                 .slice(prefixMatch[0].length)
                 .trimStart();
-
-              // Now use the command regex to match the actual command and extract args
-              const commandMatch = textWithoutPrefix.match(
-                command.commandRegex
-              );
-              if (commandMatch) {
-                // Update matchedCommand with the actual command that was matched plus the prefix
-                matchedCommand = matchedPrefix + commandMatch[0];
-                // Remove the matched command (prefix + command) from the original text, leaving only args
-                const textAfterCommand = msgData.text
-                  .slice(matchedCommand.length)
-                  .trimStart();
-                // Update processedText with the remaining text (args)
-                processedText = textAfterCommand;
-                prefixStripped = true;
-              } else {
-                // If command doesn't match, use the text without prefix
-                processedText = textWithoutPrefix;
-                // Set matchedCommand to just the prefix since no command matched
-                matchedCommand = matchedPrefix;
-                prefixStripped = true;
-              }
+              prefixText += matchedPrefix;
             }
           } catch (error) {
             // If the prefix regex is invalid, log an error but continue with original text
@@ -392,72 +374,53 @@ const chatMessageSubscription = nats.subscribe(
           }
         }
 
-        // Check for nick prefix (can work in combination with platform prefix)
-        let nickPrefixStripped = false;
+        // Apply nick prefix if allowed (can work in combination with platform prefix)
         if (command.nickPrefixAllowed && msgData.botNick) {
           // Create a regex pattern to match the bot's nick followed by common separators
           const nickPrefixPattern = new RegExp(
             `^${msgData.botNick}[:;, ]+`,
             'i'
           );
-
-          // If we already stripped a platform prefix, check against the processed text
-          const textToCheck = prefixStripped ? processedText : msgData.text;
-          const nickMatch = textToCheck.match(nickPrefixPattern);
+          const nickMatch = processedTextForMatching.match(nickPrefixPattern);
           if (nickMatch) {
             // Extract the matched nick prefix
             const matchedNickPrefix = nickMatch[0];
             // Remove the nick prefix from the command text
-            const textWithoutNickPrefix = textToCheck
+            processedTextForMatching = processedTextForMatching
               .slice(nickMatch[0].length)
               .trimStart();
-
-            // Now use the command regex to match the actual command and extract args
-            const commandMatch = textWithoutNickPrefix.match(
-              command.commandRegex
-            );
-            if (commandMatch) {
-              // Update matchedCommand with the actual command that was matched plus the nick prefix
-              // If we already had a platform prefix, append to that
-              matchedCommand = prefixStripped
-                ? matchedCommand + matchedNickPrefix + commandMatch[0]
-                : matchedNickPrefix + commandMatch[0];
-              // Remove the matched command (nick prefix + command) from the original text, leaving only args
-              // Calculate position correctly based on what prefixes we've stripped
-              const textAfterCommand = prefixStripped
-                ? msgData.text
-                    .slice(
-                      (prefixStripped
-                        ? matchedCommand.length -
-                          commandMatch[0].length -
-                          matchedNickPrefix.length
-                        : 0) + matchedCommand.length
-                    )
-                    .trimStart()
-                : msgData.text.slice(matchedCommand.length).trimStart();
-              // Update processedText with the remaining text (args)
-              processedText = textAfterCommand;
-              nickPrefixStripped = true;
-            } else {
-              // If command doesn't match, use the text without nick prefix
-              processedText = textWithoutNickPrefix;
-              // Set matchedCommand to include the nick prefix since no command matched
-              matchedCommand = prefixStripped
-                ? matchedCommand + matchedNickPrefix
-                : matchedNickPrefix;
-              nickPrefixStripped = true;
-            }
+            prefixText += matchedNickPrefix;
           }
         }
 
-        // If no prefixes were used or they didn't match, check if the command regex matches the full text
-        if (!prefixStripped && !nickPrefixStripped) {
-          const commandMatch = msgData.text.match(command.commandRegex);
-          if (commandMatch) {
-            matchedCommand = commandMatch[0];
+        // Now use the command regex to match the actual command and extract args
+        const commandMatch = processedTextForMatching.match(
+          command.commandRegex
+        );
+        if (commandMatch) {
+          // Update matchedCommand with the actual command that was matched plus the prefixes
+          matchedCommand = prefixText + commandMatch[0];
+          // Remove the matched command (prefixes + command) from the original text, leaving only args
+          const textAfterCommand = msgData.text
+            .slice(matchedCommand.length)
+            .trimStart();
+          // Update processedText with the remaining text (args)
+          processedText = textAfterCommand;
+        } else if (prefixText) {
+          // If prefixes were matched but command didn't match, use the text without prefixes
+          processedText = processedTextForMatching;
+          // Set matchedCommand to just the prefixes since no command matched
+          matchedCommand = prefixText;
+        } else {
+          // If no prefixes were used, check if the command regex matches the full text
+          const directCommandMatch = msgData.text.match(command.commandRegex);
+          if (directCommandMatch) {
+            matchedCommand = directCommandMatch[0];
             // Remove the matched command from the text, leaving only args
             const textAfterCommand = msgData.text
-              .slice((commandMatch.index || 0) + commandMatch[0].length)
+              .slice(
+                (directCommandMatch.index || 0) + directCommandMatch[0].length
+              )
               .trimStart();
             // Update processedText with the remaining text (args)
             processedText = textAfterCommand;
