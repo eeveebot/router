@@ -11,6 +11,25 @@ import { RateLimiter } from './lib/rate-limiter.mjs';
 import { BroadcastRegistry } from './lib/broadcast-registry.mjs';
 import { BroadcastRegistration } from './types/broadcast.mjs';
 
+// HTTP server imports
+import express, { Application, Request, Response } from 'express';
+import apiRoutes from './api/routes.mjs';
+
+// Metrics imports
+import {
+  initializeSystemMetrics,
+  messageCounter,
+  messageProcessingTime,
+  commandCounter,
+  commandProcessingTime,
+  broadcastCounter,
+  rateLimitCounter,
+  natsPublishCounter,
+  natsSubscribeCounter,
+  errorCounter,
+  registrationCounter,
+} from './lib/metrics/index.mjs';
+
 // Record module startup time for uptime tracking
 const moduleStartTime = Date.now();
 
@@ -60,6 +79,12 @@ setInterval(() => {
   rateLimiter.cleanup();
 }, 1000); // Check every second
 
+// Initialize system metrics
+initializeSystemMetrics();
+
+// Setup HTTP API server
+setupHttpServer();
+
 //
 // Do whatever teardown is necessary before calling common handler
 process.on('SIGINT', () => {
@@ -82,6 +107,7 @@ process.on('SIGTERM', () => {
 const chatMessageSubscription = nats.subscribe(
   'chat.message.incoming.>',
   (subject, message) => {
+    const messageTimer = messageProcessingTime.startTimer();
     try {
       const msgData = JSON.parse(message.string());
       log.info('Received chat message', {
@@ -92,6 +118,13 @@ const chatMessageSubscription = nats.subscribe(
         channel: msgData.channel,
         user: msgData.user,
         text: msgData.text,
+      });
+
+      // Increment message counter
+      messageCounter.inc({
+        platform: msgData.platform,
+        network: msgData.network,
+        result: 'success',
       });
 
       // Check if this message matches any registered commands
@@ -179,9 +212,33 @@ const chatMessageSubscription = nats.subscribe(
         if (!isAllowed) {
           if (command.ratelimit.mode === 'drop') {
             // Drop the command execution - do nothing
+            rateLimitCounter.inc({
+              command_uuid: command.commandUUID,
+              action: 'dropped',
+              mode: command.ratelimit.mode,
+            });
+            commandCounter.inc({
+              command_uuid: command.commandUUID,
+              platform: msgData.platform,
+              network: msgData.network,
+              channel: msgData.channel,
+              rate_limit_action: 'dropped',
+            });
             return;
           } else if (command.ratelimit.mode === 'enqueue') {
             // Enqueue the command for later execution
+            rateLimitCounter.inc({
+              command_uuid: command.commandUUID,
+              action: 'enqueued',
+              mode: command.ratelimit.mode,
+            });
+            commandCounter.inc({
+              command_uuid: command.commandUUID,
+              platform: msgData.platform,
+              network: msgData.network,
+              channel: msgData.channel,
+              rate_limit_action: 'enqueued',
+            });
             const commandSubject = `command.execute.${command.commandUUID}`;
             rateLimiter.enqueueCommand(
               command.commandUUID,
@@ -215,6 +272,11 @@ const chatMessageSubscription = nats.subscribe(
           timestamp: msgData.timestamp,
         };
 
+        // Start command processing timer
+        const commandTimer = commandProcessingTime.startTimer({
+          command_uuid: command.commandUUID,
+        });
+
         void nats.publish(commandSubject, JSON.stringify(commandMessage));
         log.info('Published command execution', {
           producer: 'router',
@@ -224,6 +286,17 @@ const chatMessageSubscription = nats.subscribe(
           originalText: msgData.text,
           matchedCommand: matchedCommand,
         });
+
+        // Record successful command processing
+        commandCounter.inc({
+          command_uuid: command.commandUUID,
+          platform: msgData.platform,
+          network: msgData.network,
+          channel: msgData.channel,
+          rate_limit_action: 'allowed',
+        });
+        natsPublishCounter.inc({ type: 'command' });
+        commandTimer();
       });
 
       // For each matching broadcast, publish the message to the broadcast channel
@@ -247,6 +320,15 @@ const chatMessageSubscription = nats.subscribe(
           user: msgData.user,
           subject: broadcastSubject,
         });
+
+        // Record broadcast processing
+        broadcastCounter.inc({
+          broadcast_uuid: broadcast.broadcastUUID,
+          platform: msgData.platform,
+          network: msgData.network,
+          channel: msgData.channel,
+        });
+        natsPublishCounter.inc({ type: 'broadcast' });
       });
     } catch (err: unknown) {
       const error = err as Error;
@@ -256,10 +338,27 @@ const chatMessageSubscription = nats.subscribe(
         errorMessage: error.message,
         rawMessage: message.string(),
       });
+      
+      // Increment error counter
+      messageCounter.inc({
+        platform: 'unknown',
+        network: 'unknown',
+        result: 'error',
+      });
+      errorCounter.inc({
+        type: 'message_parse',
+        operation: 'chat_message_processing',
+      });
+    } finally {
+      // Record message processing time
+      messageTimer();
     }
   }
 );
 natsSubscriptions.push(chatMessageSubscription);
+
+// Record subscription metric
+natsSubscribeCounter.inc({ subject: 'chat.message.incoming.>' });
 
 // Subscribe to command.register messages
 const commandRegisterSubscription = nats.subscribe(
@@ -287,6 +386,12 @@ const commandRegisterSubscription = nats.subscribe(
         producer: 'router',
         commandUUID: registrationData.commandUUID,
       });
+      
+      // Record successful registration
+      registrationCounter.inc({
+        type: 'command',
+        result: 'success',
+      });
     } catch (err: unknown) {
       const error = err as Error;
       log.error('Failed to process command registration', {
@@ -295,10 +400,23 @@ const commandRegisterSubscription = nats.subscribe(
         errorMessage: error.message,
         rawMessage: message.string(),
       });
+      
+      // Record registration error
+      registrationCounter.inc({
+        type: 'command',
+        result: 'error',
+      });
+      errorCounter.inc({
+        type: 'registration',
+        operation: 'command_registration',
+      });
     }
   }
 );
 natsSubscriptions.push(commandRegisterSubscription);
+
+// Record subscription metric
+natsSubscribeCounter.inc({ subject: 'command.register' });
 
 // Subscribe to broadcast.register messages
 const broadcastRegisterSubscription = nats.subscribe(
@@ -326,6 +444,12 @@ const broadcastRegisterSubscription = nats.subscribe(
         producer: 'router',
         broadcastUUID: registrationData.broadcastUUID,
       });
+      
+      // Record successful registration
+      registrationCounter.inc({
+        type: 'broadcast',
+        result: 'success',
+      });
     } catch (err: unknown) {
       const error = err as Error;
       log.error('Failed to process broadcast registration', {
@@ -334,10 +458,23 @@ const broadcastRegisterSubscription = nats.subscribe(
         errorMessage: error.message,
         rawMessage: message.string(),
       });
+      
+      // Record registration error
+      registrationCounter.inc({
+        type: 'broadcast',
+        result: 'error',
+      });
+      errorCounter.inc({
+        type: 'registration',
+        operation: 'broadcast_registration',
+      });
     }
   }
 );
 natsSubscriptions.push(broadcastRegisterSubscription);
+
+// Record subscription metric
+natsSubscribeCounter.inc({ subject: 'broadcast.register' });
 
 // Subscribe to admin requests for rate limit statistics
 const adminRequestSub = nats.subscribe(
@@ -385,6 +522,9 @@ const adminRequestSub = nats.subscribe(
 );
 natsSubscriptions.push(adminRequestSub);
 
+// Record subscription metric
+natsSubscribeCounter.inc({ subject: 'admin.request.router' });
+
 // Subscribe to stats.uptime messages and respond with module uptime
 const statsUptimeSub = nats.subscribe('stats.uptime', (subject, message) => {
   try {
@@ -416,8 +556,43 @@ const statsUptimeSub = nats.subscribe('stats.uptime', (subject, message) => {
 });
 natsSubscriptions.push(statsUptimeSub);
 
+// Record subscription metric
+natsSubscribeCounter.inc({ subject: 'stats.uptime' });
+
 // Ask all modules to publish their commands
 void nats.publish('control.registerCommands', JSON.stringify({}));
 
 // Ask all modules to publish their broadcasts
 void nats.publish('control.registerBroadcasts', JSON.stringify({}));
+
+/**
+ * Setup HTTP API server
+ */
+function setupHttpServer() {
+  const app: Application = express();
+  const port = process.env.HTTP_API_PORT || '9001';
+
+  // Middleware
+  app.use(express.json());
+
+  // API routes
+  app.use('/api', apiRoutes);
+
+  // Root endpoint
+  app.get('/', (req: Request, res: Response) => {
+    res.status(200).json({
+      message: 'eevee.bot Router API',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Start server
+  const server = app.listen(port, () => {
+    log.info(`HTTP API server listening on port ${port}`);
+  });
+
+  // Handle server errors
+  server.on('error', (err: Error) => {
+    log.error('HTTP API server error', err);
+  });
+}
