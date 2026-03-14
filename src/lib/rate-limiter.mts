@@ -30,23 +30,36 @@ export class RateLimiter {
   private commandQueue: QueuedCommand[] = [];
   private processingQueue = false;
   private notifier: PlatformNotifier;
+  private commandRegistry: import('./command-registry.mjs').CommandRegistry | null = null;
 
-  constructor() {
+  constructor(commandRegistry?: import('./command-registry.mjs').CommandRegistry) {
     this.notifier = new PlatformNotifier();
+    if (commandRegistry) {
+      this.commandRegistry = commandRegistry;
+    }
+  }
+
+  public setCommandRegistry(commandRegistry: import('./command-registry.mjs').CommandRegistry): void {
+    this.commandRegistry = commandRegistry;
   }
 
   public setNatsClient(nats: InstanceType<typeof NatsClient>): void {
     this.notifier.setNatsClient(nats);
   }
 
-  public getStats(): Record<string, { count: number; limit: number; interval: string }> {
-    const stats: Record<string, { count: number; limit: number; interval: string }> = {};
+  public getStats(): Record<string, { count: number; limit: number; interval: string; commandName?: string }> {
+    const stats: Record<string, { count: number; limit: number; interval: string; commandName?: string }> = {};
     
     for (const [key, state] of this.limits.entries()) {
+      // Try to get the command display name from the registry
+      const commandUUID = key.split(':')[0];
+      const commandName = this.commandRegistry?.getCommandDisplayName(commandUUID) || commandUUID;
+      
       stats[key] = {
         count: state.count,
         limit: state.limit,
-        interval: state.interval
+        interval: state.interval,
+        commandName: commandName
       };
     }
     

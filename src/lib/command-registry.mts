@@ -153,6 +153,11 @@ export class CommandRegistry {
     return Array.from(this.commands.values());
   }
 
+  getCommandDisplayName(commandUUID: string): string | undefined {
+    const command = this.commands.get(commandUUID);
+    return command?.commandDisplayName;
+  }
+
   findMatchingCommands(
     platform: string,
     network: string,

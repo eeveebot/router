@@ -13,7 +13,7 @@ export { rateLimiter };
 
 const natsClients: InstanceType<typeof NatsClient>[] = [];
 const natsSubscriptions: Array<Promise<string | boolean>> = [];
-const rateLimiter = new RateLimiter();
+const rateLimiter = new RateLimiter(commandRegistry);
 
 // Periodically process the command queue
 setInterval(() => {
