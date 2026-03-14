@@ -171,17 +171,14 @@ const chatMessageSubscription = nats.subscribe(
                 command.commandRegex
               );
               if (commandMatch) {
+                // Update matchedCommand with the actual command that was matched
+                matchedCommand = commandMatch[0].trim();
                 // Remove the matched command from the text, leaving only args
                 const textAfterCommand = textWithoutPrefix
                   .slice(commandMatch[0].length)
                   .trim();
-                // Only update processedText if there's actually text after the command
-                if (textAfterCommand.length > 0) {
-                  processedText = textAfterCommand;
-                } else {
-                  // If there's no text after the command, keep the original text without prefix
-                  processedText = textWithoutPrefix;
-                }
+                // Update processedText with the remaining text (args)
+                processedText = textAfterCommand;
               } else {
                 // If command doesn't match, use the text without prefix
                 processedText = textWithoutPrefix;
