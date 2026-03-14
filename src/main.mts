@@ -346,7 +346,8 @@ const chatMessageSubscription = nats.subscribe(
         let processedText = msgData.text;
         let matchedCommand = '';
 
-        // Check for platform prefix first
+        // Check for platform prefix
+        let prefixStripped = false;
         if (command.platformPrefixAllowed && msgData.commonPrefixRegex) {
           try {
             const prefixRegex = new RegExp(msgData.commonPrefixRegex);
@@ -372,11 +373,13 @@ const chatMessageSubscription = nats.subscribe(
                   .trimStart();
                 // Update processedText with the remaining text (args)
                 processedText = textAfterCommand;
+                prefixStripped = true;
               } else {
                 // If command doesn't match, use the text without prefix
                 processedText = textWithoutPrefix;
                 // Set matchedCommand to just the prefix since no command matched
                 matchedCommand = matchedPrefix;
+                prefixStripped = true;
               }
             }
           } catch (error) {
@@ -388,19 +391,24 @@ const chatMessageSubscription = nats.subscribe(
             });
           }
         }
-        // Check for nick prefix if platform prefix wasn't matched
-        else if (command.nickPrefixAllowed && msgData.botNick) {
+
+        // Check for nick prefix (can work in combination with platform prefix)
+        let nickPrefixStripped = false;
+        if (command.nickPrefixAllowed && msgData.botNick) {
           // Create a regex pattern to match the bot's nick followed by common separators
           const nickPrefixPattern = new RegExp(
             `^${msgData.botNick}[:;, ]+`,
             'i'
           );
-          const nickMatch = msgData.text.match(nickPrefixPattern);
+
+          // If we already stripped a platform prefix, check against the processed text
+          const textToCheck = prefixStripped ? processedText : msgData.text;
+          const nickMatch = textToCheck.match(nickPrefixPattern);
           if (nickMatch) {
             // Extract the matched nick prefix
             const matchedNickPrefix = nickMatch[0];
             // Remove the nick prefix from the command text
-            const textWithoutNickPrefix = msgData.text
+            const textWithoutNickPrefix = textToCheck
               .slice(nickMatch[0].length)
               .trimStart();
 
@@ -410,34 +418,40 @@ const chatMessageSubscription = nats.subscribe(
             );
             if (commandMatch) {
               // Update matchedCommand with the actual command that was matched plus the nick prefix
-              matchedCommand = matchedNickPrefix + commandMatch[0];
+              // If we already had a platform prefix, append to that
+              matchedCommand = prefixStripped
+                ? matchedCommand + matchedNickPrefix + commandMatch[0]
+                : matchedNickPrefix + commandMatch[0];
               // Remove the matched command (nick prefix + command) from the original text, leaving only args
-              const textAfterCommand = msgData.text
-                .slice(matchedCommand.length)
-                .trimStart();
+              // Calculate position correctly based on what prefixes we've stripped
+              const textAfterCommand = prefixStripped
+                ? msgData.text
+                    .slice(
+                      (prefixStripped
+                        ? matchedCommand.length -
+                          commandMatch[0].length -
+                          matchedNickPrefix.length
+                        : 0) + matchedCommand.length
+                    )
+                    .trimStart()
+                : msgData.text.slice(matchedCommand.length).trimStart();
               // Update processedText with the remaining text (args)
               processedText = textAfterCommand;
+              nickPrefixStripped = true;
             } else {
               // If command doesn't match, use the text without nick prefix
               processedText = textWithoutNickPrefix;
-              // Set matchedCommand to just the nick prefix since no command matched
-              matchedCommand = matchedNickPrefix;
-            }
-          } else {
-            // If no nick prefix is used, check if the command regex matches the full text
-            const commandMatch = msgData.text.match(command.commandRegex);
-            if (commandMatch) {
-              matchedCommand = commandMatch[0];
-              // Remove the matched command from the text, leaving only args
-              const textAfterCommand = msgData.text
-                .slice((commandMatch.index || 0) + commandMatch[0].length)
-                .trimStart();
-              // Update processedText with the remaining text (args)
-              processedText = textAfterCommand;
+              // Set matchedCommand to include the nick prefix since no command matched
+              matchedCommand = prefixStripped
+                ? matchedCommand + matchedNickPrefix
+                : matchedNickPrefix;
+              nickPrefixStripped = true;
             }
           }
-        } else {
-          // If no prefix is used, check if the command regex matches the full text
+        }
+
+        // If no prefixes were used or they didn't match, check if the command regex matches the full text
+        if (!prefixStripped && !nickPrefixStripped) {
           const commandMatch = msgData.text.match(command.commandRegex);
           if (commandMatch) {
             matchedCommand = commandMatch[0];
@@ -774,33 +788,33 @@ const adminRequestSub = nats.subscribe(
           const registry = commandRegistry.getAllCommands();
 
           // Sanitize the registry data to remove circular references and non-serializable objects
-          const sanitizedRegistry = registry.map(command => ({
+          const sanitizedRegistry = registry.map((command) => ({
             commandUUID: command.commandUUID,
             commandDisplayName: command.commandDisplayName,
             platformRegex: {
-              source: command.platformRegex.source
+              source: command.platformRegex.source,
             },
             networkRegex: {
-              source: command.networkRegex.source
+              source: command.networkRegex.source,
             },
             instanceRegex: {
-              source: command.instanceRegex.source
+              source: command.instanceRegex.source,
             },
             channelRegex: {
-              source: command.channelRegex.source
+              source: command.channelRegex.source,
             },
             userRegex: {
-              source: command.userRegex.source
+              source: command.userRegex.source,
             },
             commandRegex: {
-              source: command.commandRegex.source
+              source: command.commandRegex.source,
             },
             platformPrefixAllowed: command.platformPrefixAllowed,
             nickPrefixAllowed: command.nickPrefixAllowed,
             ratelimit: command.ratelimit,
             ttl: command.ttl,
             registeredAt: command.registeredAt,
-            expiresAt: command.expiresAt
+            expiresAt: command.expiresAt,
             // Exclude timers and other non-serializable properties
           }));
 
@@ -826,10 +840,14 @@ const adminRequestSub = nats.subscribe(
           log.error('Failed to generate command registry', {
             producer: 'router',
             trace: data.trace,
-            error: registryError instanceof Error ? registryError.message : String(registryError),
-            stack: registryError instanceof Error ? registryError.stack : undefined,
+            error:
+              registryError instanceof Error
+                ? registryError.message
+                : String(registryError),
+            stack:
+              registryError instanceof Error ? registryError.stack : undefined,
           });
-          
+
           // Send error response back to admin module
           const errorMessage = {
             action: 'command-registry-error',
@@ -847,8 +865,12 @@ const adminRequestSub = nats.subscribe(
             log.error('Failed to publish command registry error response', {
               producer: 'router',
               trace: data.trace,
-              error: publishError instanceof Error ? publishError.message : String(publishError),
-              stack: publishError instanceof Error ? publishError.stack : undefined,
+              error:
+                publishError instanceof Error
+                  ? publishError.message
+                  : String(publishError),
+              stack:
+                publishError instanceof Error ? publishError.stack : undefined,
             });
           }
         }
@@ -869,37 +891,40 @@ natsSubscriptions.push(adminRequestSub);
 natsSubscribeCounter.inc({ subject: 'admin.request.router' });
 
 // Subscribe to stats.emit.request messages and respond with module stats
-const statsEmitRequestSub = nats.subscribe('stats.emit.request', (subject, message) => {
-  try {
-    const data = JSON.parse(message.string());
-    log.info('Received stats.emit.request', {
-      producer: 'router',
-      replyChannel: data.replyChannel,
-    });
+const statsEmitRequestSub = nats.subscribe(
+  'stats.emit.request',
+  (subject, message) => {
+    try {
+      const data = JSON.parse(message.string());
+      log.info('Received stats.emit.request', {
+        producer: 'router',
+        replyChannel: data.replyChannel,
+      });
 
-    // Calculate uptime in milliseconds
-    const uptime = Date.now() - moduleStartTime;
+      // Calculate uptime in milliseconds
+      const uptime = Date.now() - moduleStartTime;
 
-    // Send stats back via the ephemeral reply channel
-    const statsResponse = {
-      module: 'router',
-      stats: {
-        uptime_seconds: Math.floor(uptime / 1000),
-        uptime_formatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
-        // TODO: Add more detailed stats from prom-client metrics
-      },
-    };
+      // Send stats back via the ephemeral reply channel
+      const statsResponse = {
+        module: 'router',
+        stats: {
+          uptime_seconds: Math.floor(uptime / 1000),
+          uptime_formatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
+          // TODO: Add more detailed stats from prom-client metrics
+        },
+      };
 
-    if (data.replyChannel) {
-      void nats.publish(data.replyChannel, JSON.stringify(statsResponse));
+      if (data.replyChannel) {
+        void nats.publish(data.replyChannel, JSON.stringify(statsResponse));
+      }
+    } catch (error) {
+      log.error('Failed to process stats.emit.request', {
+        producer: 'router',
+        error: error,
+      });
     }
-  } catch (error) {
-    log.error('Failed to process stats.emit.request', {
-      producer: 'router',
-      error: error,
-    });
   }
-});
+);
 
 // Subscribe to stats.uptime messages and respond with module uptime
 const statsUptimeSub = nats.subscribe('stats.uptime', (subject, message) => {

@@ -221,7 +221,8 @@ export class CommandRegistry {
 
       // If nickPrefixAllowed is true and botNick is provided,
       // check if the command text starts with the bot's nick followed by a separator
-      if (cmd.nickPrefixAllowed && botNick) {
+      // Only apply this if we haven't already stripped a platform prefix
+      if (cmd.nickPrefixAllowed && botNick && textToMatch === commandText) {
         // Create a regex pattern to match the bot's nick followed by common separators
         const nickPrefixPattern = new RegExp(`^${botNick}[:;, ]+`, 'i');
         const nickMatch = commandText.match(nickPrefixPattern);
