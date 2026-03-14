@@ -7,9 +7,21 @@
 import { NatsClient, log } from '@eeveebot/libeevee';
 import { CommandRegistry } from './lib/command-registry.mjs';
 import { CommandRegistration } from './types/command.mjs';
+import { RateLimiter } from './lib/rate-limiter.mjs';
 
 const natsClients: InstanceType<typeof NatsClient>[] = [];
 const natsSubscriptions: Array<Promise<string | boolean>> = [];
+const rateLimiter = new RateLimiter();
+
+// Periodically process the command queue
+setInterval(() => {
+  if (nats && nats.nats) {
+    void rateLimiter.processQueue(nats);
+  }
+
+  // Clean up old rate limit entries
+  rateLimiter.cleanup();
+}, 1000); // Check every second
 
 //
 // Do whatever teardown is necessary before calling common handler
@@ -79,7 +91,7 @@ const chatMessageSubscription = nats.subscribe(
         msgData.commonPrefixRegex
       );
 
-      // For each matching command, publish a command execution message
+      // For each matching command, check rate limits and publish command execution message
       matchingCommands.forEach((command) => {
         // Process the command text to strip prefix if needed and extract matched command
         let processedText = msgData.text;
@@ -125,6 +137,43 @@ const chatMessageSubscription = nats.subscribe(
               commonPrefixRegex: msgData.commonPrefixRegex,
               error: (error as Error).message,
             });
+          }
+        }
+
+        // Check rate limits
+        const isAllowed = rateLimiter.isAllowed(
+          command.commandUUID,
+          command.ratelimit,
+          msgData.platform,
+          msgData.network,
+          msgData.instance,
+          msgData.channel,
+          msgData.user
+        );
+
+        // Handle rate limiting based on mode
+        if (!isAllowed) {
+          if (command.ratelimit.mode === 'drop') {
+            // Drop the command execution - do nothing
+            return;
+          } else if (command.ratelimit.mode === 'enqueue') {
+            // Enqueue the command for later execution
+            const commandSubject = `command.execute.${command.commandUUID}`;
+            rateLimiter.enqueueCommand(
+              command.commandUUID,
+              msgData.platform,
+              msgData.network,
+              msgData.instance,
+              msgData.channel,
+              msgData.user,
+              msgData.userHost,
+              processedText,
+              msgData.text,
+              matchedCommand,
+              msgData.timestamp,
+              [commandSubject]
+            );
+            return;
           }
         }
 
