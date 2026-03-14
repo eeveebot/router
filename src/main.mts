@@ -868,6 +868,39 @@ natsSubscriptions.push(adminRequestSub);
 // Record subscription metric
 natsSubscribeCounter.inc({ subject: 'admin.request.router' });
 
+// Subscribe to stats.emit.request messages and respond with module stats
+const statsEmitRequestSub = nats.subscribe('stats.emit.request', (subject, message) => {
+  try {
+    const data = JSON.parse(message.string());
+    log.info('Received stats.emit.request', {
+      producer: 'router',
+      replyChannel: data.replyChannel,
+    });
+
+    // Calculate uptime in milliseconds
+    const uptime = Date.now() - moduleStartTime;
+
+    // Send stats back via the ephemeral reply channel
+    const statsResponse = {
+      module: 'router',
+      stats: {
+        uptime_seconds: Math.floor(uptime / 1000),
+        uptime_formatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
+        // TODO: Add more detailed stats from prom-client metrics
+      },
+    };
+
+    if (data.replyChannel) {
+      void nats.publish(data.replyChannel, JSON.stringify(statsResponse));
+    }
+  } catch (error) {
+    log.error('Failed to process stats.emit.request', {
+      producer: 'router',
+      error: error,
+    });
+  }
+});
+
 // Subscribe to stats.uptime messages and respond with module uptime
 const statsUptimeSub = nats.subscribe('stats.uptime', (subject, message) => {
   try {
@@ -897,9 +930,10 @@ const statsUptimeSub = nats.subscribe('stats.uptime', (subject, message) => {
     });
   }
 });
-natsSubscriptions.push(statsUptimeSub);
+natsSubscriptions.push(statsEmitRequestSub, statsUptimeSub);
 
-// Record subscription metric
+// Record subscription metrics
+natsSubscribeCounter.inc({ subject: 'stats.emit.request' });
 natsSubscribeCounter.inc({ subject: 'stats.uptime' });
 
 // Ask all modules to publish their commands
