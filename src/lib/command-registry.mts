@@ -182,20 +182,22 @@ export class CommandRegistry {
         }
       }
 
-      // Check if the command regex matches the text and extract match details
-      const commandMatch = textToMatch.match(cmd.commandRegex);
-      if (commandMatch) {
-        // Extract the args text (text after the matched command)
-        const textAfterCommand = textToMatch
-          .slice((commandMatch.index || 0) + commandMatch[0].length)
-          .trimStart();
+      // If neither platform or nick prefixes are enabled, check if the command regex matches the full and extract match details
+      if (!cmd.platformPrefixAllowed && !cmd.nickPrefixAllowed) {
+        const commandMatch = commandText.match(cmd.commandRegex);
+        if (commandMatch) {
+          // Extract the args text (text after the matched command)
+          const textAfterCommand = textToMatch
+            .slice((commandMatch.index || 0) + commandMatch[0].length)
+            .trimStart();
 
-        results.push({
-          command: cmd,
-          matchedText: textToMatch,
-          argsText: textAfterCommand,
-          matchedCommand: commandMatch[0],
-        });
+          results.push({
+            command: cmd,
+            matchedText: textToMatch,
+            argsText: textAfterCommand,
+            matchedCommand: commandMatch[0],
+          });
+        }
       }
     }
 
