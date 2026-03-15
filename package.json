@@ -28,7 +28,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@eeveebot/libeevee": "^3.3.2",
+    "@eeveebot/libeevee": "^3.6.0",
     "express": "^5.2.1",
     "irc-framework": "^4.14.0",
     "js-yaml": "^4.1.1",
