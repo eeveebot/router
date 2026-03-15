@@ -11,21 +11,15 @@ export class CommandRegistry {
 
   // Cleanup-like method to clean up resources
   public destroy(): void {
-    // Clear all command timers
-    for (const command of this.commands.values()) {
-      if (command.timers) {
-        clearTimeout(command.timers.cleanupTimer);
-        clearTimeout(command.timers.reRegistrationTimer);
-      }
-    }
     this.commands.clear();
   }
 
   /**
-   * Prompt modules to re-register a specific command that is halfway through its TTL
+   * Prompt modules to re-register a specific command
    */
-  private promptReRegistration(command: RegisteredCommand): void {
-    if (!this.natsClient) {
+  public promptReRegistration(commandUUID: string): void {
+    const command = this.commands.get(commandUUID);
+    if (!command || !this.natsClient) {
       return;
     }
 
@@ -56,17 +50,6 @@ export class CommandRegistry {
 
   registerCommand(registration: CommandRegistration): void {
     try {
-      const now = Date.now();
-      // Use provided TTL or default to 600000ms (10 minutes)
-      const ttl = registration.ttl ?? 600000;
-
-      // If command already exists, clear its existing timers
-      const existingCommand = this.commands.get(registration.commandUUID);
-      if (existingCommand && existingCommand.timers) {
-        clearTimeout(existingCommand.timers.cleanupTimer);
-        clearTimeout(existingCommand.timers.reRegistrationTimer);
-      }
-
       const registeredCommand: RegisteredCommand = {
         commandUUID: registration.commandUUID,
         commandDisplayName: registration.commandDisplayName,
@@ -79,33 +62,6 @@ export class CommandRegistry {
         platformPrefixAllowed: registration.platformPrefixAllowed,
         nickPrefixAllowed: registration.nickPrefixAllowed,
         ratelimit: registration.ratelimit,
-        ttl: ttl,
-        registeredAt: now,
-        expiresAt: now + ttl,
-      };
-
-      // Set up individual timers for this command
-      const cleanupTimer = setTimeout(() => {
-        this.commands.delete(registration.commandUUID);
-        log.info('Expired command removed', {
-          producer: 'router',
-          commandUUID: registration.commandUUID,
-          commandDisplayName: registration.commandDisplayName,
-        });
-      }, ttl);
-
-      // Set up re-registration timer for halfway through TTL
-      const reRegistrationTimer = setTimeout(() => {
-        const command = this.commands.get(registration.commandUUID);
-        if (command) {
-          this.promptReRegistration(command);
-        }
-      }, ttl / 2);
-
-      // Store timers in the command object
-      registeredCommand.timers = {
-        cleanupTimer,
-        reRegistrationTimer,
       };
 
       this.commands.set(registration.commandUUID, registeredCommand);
@@ -114,8 +70,6 @@ export class CommandRegistry {
         producer: 'router',
         commandUUID: registration.commandUUID,
         commandDisplayName: registration.commandDisplayName,
-        ttl: ttl,
-        expiresAt: registeredCommand.expiresAt,
       });
     } catch (error) {
       log.error('Failed to register command', {
@@ -128,14 +82,7 @@ export class CommandRegistry {
   }
 
   unregisterCommand(commandUUID: string): boolean {
-    const command = this.commands.get(commandUUID);
     const result = this.commands.delete(commandUUID);
-
-    // Clear timers for this command
-    if (command && command.timers) {
-      clearTimeout(command.timers.cleanupTimer);
-      clearTimeout(command.timers.reRegistrationTimer);
-    }
 
     if (result) {
       log.info('Unregistered command', {
@@ -179,12 +126,7 @@ export class CommandRegistry {
     botNick?: string
   ): RegisteredCommand[] {
     return Array.from(this.commands.values()).filter((cmd) => {
-      // First check if command has expired
-      if (Date.now() > cmd.expiresAt) {
-        return false;
-      }
-
-      // Then check platform, network, instance, channel, and user regexes
+      // Check platform, network, instance, channel, and user regexes
       if (
         !cmd.platformRegex.test(platform) ||
         !cmd.networkRegex.test(network) ||

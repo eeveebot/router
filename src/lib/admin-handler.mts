@@ -82,9 +82,6 @@ export function handleAdminRequest(
           platformPrefixAllowed: command.platformPrefixAllowed,
           nickPrefixAllowed: command.nickPrefixAllowed,
           ratelimit: command.ratelimit,
-          ttl: command.ttl,
-          registeredAt: command.registeredAt,
-          expiresAt: command.expiresAt,
           // Exclude timers and other non-serializable properties
         }));
 

@@ -14,21 +14,15 @@ export class BroadcastRegistry {
 
   // Cleanup-like method to clean up resources
   public destroy(): void {
-    // Clear all broadcast timers
-    for (const broadcast of this.broadcasts.values()) {
-      if (broadcast.timers) {
-        clearTimeout(broadcast.timers.cleanupTimer);
-        clearTimeout(broadcast.timers.reRegistrationTimer);
-      }
-    }
     this.broadcasts.clear();
   }
 
   /**
-   * Prompt modules to re-register a specific broadcast that is halfway through its TTL
+   * Prompt modules to re-register a specific broadcast
    */
-  private promptReRegistration(broadcast: RegisteredBroadcast): void {
-    if (!this.natsClient) {
+  public promptReRegistration(broadcastUUID: string): void {
+    const broadcast = this.broadcasts.get(broadcastUUID);
+    if (!broadcast || !this.natsClient) {
       return;
     }
 
@@ -59,17 +53,6 @@ export class BroadcastRegistry {
 
   registerBroadcast(registration: BroadcastRegistration): void {
     try {
-      const now = Date.now();
-      // Use provided TTL or default to 120000ms (2 minutes)
-      const ttl = registration.ttl ?? 120000;
-
-      // If broadcast already exists, clear its existing timers
-      const existingBroadcast = this.broadcasts.get(registration.broadcastUUID);
-      if (existingBroadcast && existingBroadcast.timers) {
-        clearTimeout(existingBroadcast.timers.cleanupTimer);
-        clearTimeout(existingBroadcast.timers.reRegistrationTimer);
-      }
-
       const registeredBroadcast: RegisteredBroadcast = {
         broadcastUUID: registration.broadcastUUID,
         broadcastDisplayName: registration.broadcastDisplayName,
@@ -81,33 +64,6 @@ export class BroadcastRegistry {
         messageFilterRegex: registration.messageFilterRegex
           ? new RegExp(registration.messageFilterRegex)
           : undefined,
-        ttl: ttl,
-        registeredAt: now,
-        expiresAt: now + ttl,
-      };
-
-      // Set up individual timers for this broadcast
-      const cleanupTimer = setTimeout(() => {
-        this.broadcasts.delete(registration.broadcastUUID);
-        log.info('Expired broadcast removed', {
-          producer: 'router',
-          broadcastUUID: registration.broadcastUUID,
-          broadcastDisplayName: registration.broadcastDisplayName,
-        });
-      }, ttl);
-
-      // Set up re-registration timer for halfway through TTL
-      const reRegistrationTimer = setTimeout(() => {
-        const broadcast = this.broadcasts.get(registration.broadcastUUID);
-        if (broadcast) {
-          this.promptReRegistration(broadcast);
-        }
-      }, ttl / 2);
-
-      // Store timers in the broadcast object
-      registeredBroadcast.timers = {
-        cleanupTimer,
-        reRegistrationTimer,
       };
 
       this.broadcasts.set(registration.broadcastUUID, registeredBroadcast);
@@ -116,8 +72,6 @@ export class BroadcastRegistry {
         producer: 'router',
         broadcastUUID: registration.broadcastUUID,
         broadcastDisplayName: registration.broadcastDisplayName,
-        ttl: ttl,
-        expiresAt: registeredBroadcast.expiresAt,
       });
     } catch (error) {
       log.error('Failed to register broadcast', {
@@ -130,14 +84,7 @@ export class BroadcastRegistry {
   }
 
   unregisterBroadcast(broadcastUUID: string): boolean {
-    const broadcast = this.broadcasts.get(broadcastUUID);
     const result = this.broadcasts.delete(broadcastUUID);
-
-    // Clear timers for this broadcast
-    if (broadcast && broadcast.timers) {
-      clearTimeout(broadcast.timers.cleanupTimer);
-      clearTimeout(broadcast.timers.reRegistrationTimer);
-    }
 
     if (result) {
       log.info('Unregistered broadcast', {
@@ -170,12 +117,7 @@ export class BroadcastRegistry {
     messageText: string
   ): RegisteredBroadcast[] {
     return Array.from(this.broadcasts.values()).filter((broadcast) => {
-      // First check if broadcast has expired
-      if (Date.now() > broadcast.expiresAt) {
-        return false;
-      }
-
-      // Then check platform, network, instance, channel, and user regexes
+      // Check platform, network, instance, channel, and user regexes
       if (
         !broadcast.platformRegex.test(platform) ||
         !broadcast.networkRegex.test(network) ||

@@ -8,12 +8,6 @@ export interface BroadcastRegistration {
   channel: string; // regex pattern
   user: string; // regex pattern
   messageFilterRegex?: string; // Optional regex pattern to filter messages
-  ttl?: number; // Time-to-live in milliseconds (optional)
-}
-
-interface BroadcastTimers {
-  cleanupTimer: NodeJS.Timeout;
-  reRegistrationTimer: NodeJS.Timeout;
 }
 
 export interface RegisteredBroadcast {
@@ -25,8 +19,4 @@ export interface RegisteredBroadcast {
   channelRegex: RegExp;
   userRegex: RegExp;
   messageFilterRegex?: RegExp; // Optional regex pattern to filter messages
-  ttl: number; // Time-to-live in milliseconds
-  registeredAt: number; // Timestamp when the broadcast was registered
-  expiresAt: number; // Timestamp when the broadcast expires
-  timers?: BroadcastTimers; // Timers for cleanup and re-registration
 }

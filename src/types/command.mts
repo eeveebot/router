@@ -18,12 +18,6 @@ export interface CommandRegistration {
   platformPrefixAllowed: boolean;
   nickPrefixAllowed?: boolean; // Whether the bot's nick can be used as a prefix
   ratelimit: RateLimitConfig;
-  ttl?: number; // Time-to-live in milliseconds (optional)
-}
-
-interface CommandTimers {
-  cleanupTimer: NodeJS.Timeout;
-  reRegistrationTimer: NodeJS.Timeout;
 }
 
 export interface RegisteredCommand {
@@ -38,8 +32,4 @@ export interface RegisteredCommand {
   platformPrefixAllowed: boolean;
   nickPrefixAllowed?: boolean; // Whether the bot's nick can be used as a prefix
   ratelimit: RateLimitConfig;
-  ttl: number; // Time-to-live in milliseconds
-  registeredAt: number; // Timestamp when the command was registered
-  expiresAt: number; // Timestamp when the command expires
-  timers?: CommandTimers; // Timers for cleanup and re-registration
 }
