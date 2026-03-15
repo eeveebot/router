@@ -370,7 +370,7 @@ export function handleChatMessage(
         // Record successful command processing
             commandCounter.inc({
               module: 'router',
-              result: 'rate_limited_dropped',
+              result: 'success',
             });
         natsPublishCounter.inc({ module: 'router', type: 'command' });
         commandTimer();
