@@ -23,13 +23,8 @@ import {
   handleStatsEmitRequest,
   handleStatsUptimeRequest,
 } from './lib/stats-handler.mjs';
-import { setupHttpServer } from './lib/http-server.mjs';
-
 // Metrics imports
-import {
-  initializeSystemMetrics,
-  natsSubscribeCounter,
-} from './lib/metrics/index.mjs';
+import { initializeSystemMetrics, setupHttpServer, natsSubscribeCounter } from '@eeveebot/libeevee';
 
 const natsClients: InstanceType<typeof NatsClient>[] = [];
 const natsSubscriptions: Array<Promise<string | boolean>> = [];
@@ -74,10 +69,13 @@ setInterval(() => {
 }, 1000); // Check every second
 
 // Initialize system metrics
-initializeSystemMetrics();
+initializeSystemMetrics('router');
 
 // Setup HTTP API server
-setupHttpServer();
+setupHttpServer({
+  port: process.env.HTTP_API_PORT || '9000',
+  serviceName: 'router'
+});
 
 //
 // Do whatever teardown is necessary before calling common handler

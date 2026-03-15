@@ -3,7 +3,8 @@ import { CommandRegistry } from './command-registry.mjs';
 import { BroadcastRegistry } from './broadcast-registry.mjs';
 import { CommandRegistration } from '../types/command.mjs';
 import { BroadcastRegistration } from '../types/broadcast.mjs';
-import { registrationCounter, errorCounter } from './metrics/index.mjs';
+import { registrationCounter } from './metrics/index.mjs';
+import { errorCounter } from '@eeveebot/libeevee';
 
 /**
  * Handle command registration messages

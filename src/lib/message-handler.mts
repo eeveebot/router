@@ -10,8 +10,8 @@ import {
   commandProcessingTime,
   broadcastCounter,
   rateLimitCounter,
-  natsPublishCounter,
 } from './metrics/index.mjs';
+import { natsPublishCounter } from '@eeveebot/libeevee';
 
 interface MessageData {
   platform: string;
