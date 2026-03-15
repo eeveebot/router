@@ -171,14 +171,9 @@ export class CommandRegistry {
       }
 
       // Check if the command regex matches the text
-      // If the command allows prefixes, match against the possibly stripped text
-      // Otherwise, match against the original text
       if (cmd.platformPrefixAllowed || cmd.nickPrefixAllowed) {
         // For commands that allow prefixes, we match against the possibly stripped text
         return cmd.commandRegex.test(textToMatch);
-      } else {
-        // For commands that don't allow prefixes, match against the original text
-        return cmd.commandRegex.test(commandText);
       }
     });
   }
