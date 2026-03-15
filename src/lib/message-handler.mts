@@ -213,6 +213,7 @@ export function handleChatMessage(
 
       // Increment message counter for blocked messages
       messageCounter.inc({
+        module: 'router',
         platform: msgData.platform,
         network: msgData.network,
         result: 'blocked',
@@ -256,6 +257,7 @@ export function handleChatMessage(
 
       // Increment message counter for dropped messages
       messageCounter.inc({
+        module: 'router',
         platform: msgData.platform,
         network: msgData.network,
         result: 'dropped',
@@ -266,6 +268,7 @@ export function handleChatMessage(
 
     // Increment message counter for processed messages
     messageCounter.inc({
+      module: 'router',
       platform: msgData.platform,
       network: msgData.network,
       result: 'processed',
@@ -294,11 +297,13 @@ export function handleChatMessage(
           if (command.ratelimit.mode === 'drop') {
             // Drop the command execution - do nothing
             rateLimitCounter.inc({
+              module: 'router',
               command_uuid: command.commandUUID,
               action: 'dropped',
               mode: command.ratelimit.mode,
             });
             commandCounter.inc({
+              module: 'router',
               command_uuid: command.commandUUID,
               platform: msgData.platform,
               network: msgData.network,
@@ -309,11 +314,13 @@ export function handleChatMessage(
           } else if (command.ratelimit.mode === 'enqueue') {
             // Enqueue the command for later execution
             rateLimitCounter.inc({
+              module: 'router',
               command_uuid: command.commandUUID,
               action: 'enqueued',
               mode: command.ratelimit.mode,
             });
             commandCounter.inc({
+              module: 'router',
               command_uuid: command.commandUUID,
               platform: msgData.platform,
               network: msgData.network,
@@ -371,13 +378,14 @@ export function handleChatMessage(
 
         // Record successful command processing
         commandCounter.inc({
+          module: 'router',
           command_uuid: command.commandUUID,
           platform: msgData.platform,
           network: msgData.network,
           channel: msgData.channel,
           rate_limit_action: 'allowed',
         });
-        natsPublishCounter.inc({ type: 'command' });
+        natsPublishCounter.inc({ module: 'router', type: 'command' });
         commandTimer();
       }
     );
@@ -406,12 +414,13 @@ export function handleChatMessage(
 
       // Record broadcast processing
       broadcastCounter.inc({
+        module: 'router',
         broadcast_uuid: broadcast.broadcastUUID,
         platform: msgData.platform,
         network: msgData.network,
         channel: msgData.channel,
       });
-      natsPublishCounter.inc({ type: 'broadcast' });
+      natsPublishCounter.inc({ module: 'router', type: 'broadcast' });
     });
   } catch (err: unknown) {
     const error = err as Error;
@@ -424,6 +433,7 @@ export function handleChatMessage(
 
     // Increment error counter
     messageCounter.inc({
+      module: 'router',
       platform: 'unknown',
       network: 'unknown',
       result: 'error',

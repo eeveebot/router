@@ -115,7 +115,7 @@ const chatMessageSubscription = nats.subscribe(
 natsSubscriptions.push(chatMessageSubscription);
 
 // Record subscription metric
-natsSubscribeCounter.inc({ subject: 'chat.message.incoming.>' });
+natsSubscribeCounter.inc({ module: 'router', subject: 'chat.message.incoming.>' });
 
 // Subscribe to command.register messages
 const commandRegisterSubscription = nats.subscribe(
@@ -127,7 +127,7 @@ const commandRegisterSubscription = nats.subscribe(
 natsSubscriptions.push(commandRegisterSubscription);
 
 // Record subscription metric
-natsSubscribeCounter.inc({ subject: 'command.register' });
+natsSubscribeCounter.inc({ module: 'router', subject: 'command.register' });
 
 // Subscribe to broadcast.register messages
 const broadcastRegisterSubscription = nats.subscribe(
@@ -139,7 +139,7 @@ const broadcastRegisterSubscription = nats.subscribe(
 natsSubscriptions.push(broadcastRegisterSubscription);
 
 // Record subscription metric
-natsSubscribeCounter.inc({ subject: 'broadcast.register' });
+natsSubscribeCounter.inc({ module: 'router', subject: 'broadcast.register' });
 
 // Subscribe to admin requests for rate limit statistics
 const adminRequestSub = nats.subscribe(
@@ -151,7 +151,7 @@ const adminRequestSub = nats.subscribe(
 natsSubscriptions.push(adminRequestSub);
 
 // Record subscription metric
-natsSubscribeCounter.inc({ subject: 'admin.request.router' });
+natsSubscribeCounter.inc({ module: 'router', subject: 'admin.request.router' });
 
 // Subscribe to stats.emit.request messages and respond with module stats
 const statsEmitRequestSub = nats.subscribe(
@@ -168,8 +168,8 @@ const statsUptimeSub = nats.subscribe('stats.uptime', (subject, message) => {
 natsSubscriptions.push(statsEmitRequestSub, statsUptimeSub);
 
 // Record subscription metrics
-natsSubscribeCounter.inc({ subject: 'stats.emit.request' });
-natsSubscribeCounter.inc({ subject: 'stats.uptime' });
+natsSubscribeCounter.inc({ module: 'router', subject: 'stats.emit.request' });
+natsSubscribeCounter.inc({ module: 'router', subject: 'stats.uptime' });
 
 // Ask all modules to publish their commands
 void nats.publish('control.registerCommands', JSON.stringify({}));

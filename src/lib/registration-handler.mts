@@ -41,6 +41,7 @@ export function handleCommandRegistration(
 
     // Record successful registration
     registrationCounter.inc({
+      module: 'router',
       type: 'command',
       result: 'success',
     });
@@ -55,10 +56,12 @@ export function handleCommandRegistration(
 
     // Record registration error
     registrationCounter.inc({
+      module: 'router',
       type: 'command',
       result: 'error',
     });
     errorCounter.inc({
+      module: 'router',
       type: 'registration',
       operation: 'command_registration',
     });
@@ -101,6 +104,7 @@ export function handleBroadcastRegistration(
 
     // Record successful registration
     registrationCounter.inc({
+      module: 'router',
       type: 'broadcast',
       result: 'success',
     });
@@ -115,10 +119,12 @@ export function handleBroadcastRegistration(
 
     // Record registration error
     registrationCounter.inc({
+      module: 'router',
       type: 'broadcast',
       result: 'error',
     });
     errorCounter.inc({
+      module: 'router',
       type: 'registration',
       operation: 'broadcast_registration',
     });
