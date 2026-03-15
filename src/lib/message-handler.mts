@@ -4,14 +4,16 @@ import { BroadcastRegistry } from './broadcast-registry.mjs';
 import { RateLimiter } from './rate-limiter.mjs';
 import { RouterConfig } from '../types/config.mjs';
 import {
+  broadcastCounter,
+  rateLimitCounter,
+} from './metrics/index.mjs';
+import { 
   messageCounter,
   messageProcessingTime,
   commandCounter,
   commandProcessingTime,
-  broadcastCounter,
-  rateLimitCounter,
-} from './metrics/index.mjs';
-import { natsPublishCounter } from '@eeveebot/libeevee';
+  natsPublishCounter
+} from '@eeveebot/libeevee';
 
 interface MessageData {
   platform: string;
@@ -214,8 +216,7 @@ export function handleChatMessage(
       // Increment message counter for blocked messages
       messageCounter.inc({
         module: 'router',
-        platform: msgData.platform,
-        network: msgData.network,
+        direction: 'incoming',
         result: 'blocked',
       });
 
@@ -258,8 +259,7 @@ export function handleChatMessage(
       // Increment message counter for dropped messages
       messageCounter.inc({
         module: 'router',
-        platform: msgData.platform,
-        network: msgData.network,
+        direction: 'incoming',
         result: 'dropped',
       });
 
@@ -267,12 +267,11 @@ export function handleChatMessage(
     }
 
     // Increment message counter for processed messages
-    messageCounter.inc({
-      module: 'router',
-      platform: msgData.platform,
-      network: msgData.network,
-      result: 'processed',
-    });
+      messageCounter.inc({
+        module: 'router',
+        direction: 'incoming',
+        result: 'processed',
+      });
 
     // For each matching command, check rate limits and publish command execution message
     matchingCommands.forEach(
@@ -304,11 +303,7 @@ export function handleChatMessage(
             });
             commandCounter.inc({
               module: 'router',
-              command_uuid: command.commandUUID,
-              platform: msgData.platform,
-              network: msgData.network,
-              channel: msgData.channel,
-              rate_limit_action: 'dropped',
+              result: 'rate_limited_dropped',
             });
             return;
           } else if (command.ratelimit.mode === 'enqueue') {
@@ -321,11 +316,7 @@ export function handleChatMessage(
             });
             commandCounter.inc({
               module: 'router',
-              command_uuid: command.commandUUID,
-              platform: msgData.platform,
-              network: msgData.network,
-              channel: msgData.channel,
-              rate_limit_action: 'enqueued',
+              result: 'rate_limited_enqueued',
             });
             const commandSubject = `command.execute.${command.commandUUID}`;
             rateLimiter.enqueueCommand(
@@ -363,7 +354,7 @@ export function handleChatMessage(
 
         // Start command processing timer
         const commandTimer = commandProcessingTime.startTimer({
-          command_uuid: command.commandUUID,
+          module: 'router',
         });
 
         void nats.publish(commandSubject, JSON.stringify(commandMessage));
@@ -377,14 +368,10 @@ export function handleChatMessage(
         });
 
         // Record successful command processing
-        commandCounter.inc({
-          module: 'router',
-          command_uuid: command.commandUUID,
-          platform: msgData.platform,
-          network: msgData.network,
-          channel: msgData.channel,
-          rate_limit_action: 'allowed',
-        });
+            commandCounter.inc({
+              module: 'router',
+              result: 'rate_limited_dropped',
+            });
         natsPublishCounter.inc({ module: 'router', type: 'command' });
         commandTimer();
       }
@@ -434,8 +421,7 @@ export function handleChatMessage(
     // Increment error counter
     messageCounter.inc({
       module: 'router',
-      platform: 'unknown',
-      network: 'unknown',
+      direction: 'incoming',
       result: 'error',
     });
   } finally {

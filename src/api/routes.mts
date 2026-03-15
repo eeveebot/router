@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { log } from '@eeveebot/libeevee';
-import { register } from 'prom-client';
+import { log, register } from '@eeveebot/libeevee';
 
 const router = Router();
 
