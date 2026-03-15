@@ -221,13 +221,6 @@ export function handleChatMessage(
       return;
     }
 
-    // Increment message counter for processed messages
-    messageCounter.inc({
-      platform: msgData.platform,
-      network: msgData.network,
-      result: 'success',
-    });
-
     // Check if this message matches any registered commands
     const matchingCommands = commandRegistry.findMatchingCommands(
       msgData.platform,
@@ -250,159 +243,144 @@ export function handleChatMessage(
       msgData.text
     );
 
-    // For each matching command, check rate limits and publish command execution message
-    matchingCommands.forEach((command) => {
-      // Process the command text to extract args
-      // Since we already know this command matches from the registry, we just need to extract the args
-      let processedText = msgData.text;
-      let matchedCommand = '';
-      let textToMatch = msgData.text;
-
-      // Apply the same prefix stripping logic as in command-registry.mts
-      // Apply platform prefix if allowed
-      if (command.platformPrefixAllowed && msgData.commonPrefixRegex) {
-        try {
-          const prefixRegex = new RegExp(msgData.commonPrefixRegex);
-          const match = textToMatch.match(prefixRegex);
-          if (match) {
-            // Remove the prefix from the command text for matching
-            textToMatch = textToMatch.slice(match[0].length).trim();
-          }
-        } catch (error) {
-          // If the prefix regex is invalid, log an error but continue with original text
-          log.error('Invalid commonPrefixRegex, using original text', {
-            producer: 'router',
-            commonPrefixRegex: msgData.commonPrefixRegex,
-            error: (error as Error).message,
-          });
-        }
-      }
-
-      // Apply nick prefix if allowed
-      if (command.nickPrefixAllowed && msgData.botNick) {
-        // Create a regex pattern to match the bot's nick followed by common separators
-        const nickPrefixPattern = new RegExp(`^${msgData.botNick}[:;, ]+`, 'i');
-        const nickMatch = textToMatch.match(nickPrefixPattern);
-        if (nickMatch) {
-          // Remove the nick prefix from the command text for matching
-          textToMatch = textToMatch.slice(nickMatch[0].length).trim();
-        }
-      }
-
-      // Find the command match in the processed text to properly extract args
-      const commandMatch = textToMatch.match(command.commandRegex);
-      if (commandMatch) {
-        matchedCommand = commandMatch[0];
-        // Remove the matched command from the processed text, leaving only args
-        const textAfterCommand = textToMatch
-          .slice((commandMatch.index || 0) + commandMatch[0].length)
-          .trimStart();
-        // Update processedText with the remaining text (args)
-        processedText = textAfterCommand;
-      }
-
-      // Check rate limits
-      const isAllowed = rateLimiter.isAllowed(
-        command.commandUUID,
-        command.ratelimit,
-        msgData.platform,
-        msgData.network,
-        msgData.instance,
-        msgData.channel,
-        msgData.user
-      );
-
-      // Handle rate limiting based on mode
-      if (!isAllowed) {
-        if (command.ratelimit.mode === 'drop') {
-          // Drop the command execution - do nothing
-          rateLimitCounter.inc({
-            command_uuid: command.commandUUID,
-            action: 'dropped',
-            mode: command.ratelimit.mode,
-          });
-          commandCounter.inc({
-            command_uuid: command.commandUUID,
-            platform: msgData.platform,
-            network: msgData.network,
-            channel: msgData.channel,
-            rate_limit_action: 'dropped',
-          });
-          return;
-        } else if (command.ratelimit.mode === 'enqueue') {
-          // Enqueue the command for later execution
-          rateLimitCounter.inc({
-            command_uuid: command.commandUUID,
-            action: 'enqueued',
-            mode: command.ratelimit.mode,
-          });
-          commandCounter.inc({
-            command_uuid: command.commandUUID,
-            platform: msgData.platform,
-            network: msgData.network,
-            channel: msgData.channel,
-            rate_limit_action: 'enqueued',
-          });
-          const commandSubject = `command.execute.${command.commandUUID}`;
-          rateLimiter.enqueueCommand(
-            command.commandUUID,
-            msgData.platform,
-            msgData.network,
-            msgData.instance,
-            msgData.channel,
-            msgData.user,
-            msgData.userHost || '',
-            processedText,
-            msgData.text,
-            matchedCommand,
-            msgData.timestamp,
-            [commandSubject]
-          );
-          return;
-        }
-      }
-
-      const commandSubject = `command.execute.${command.commandUUID}`;
-      const commandMessage = {
-        platform: msgData.platform,
-        network: msgData.network,
-        instance: msgData.instance,
-        channel: msgData.channel,
-        user: msgData.user,
-        userHost: msgData.userHost,
-        text: processedText,
-        originalText: msgData.text,
-        matchedCommand: matchedCommand,
-        matchedText: textToMatch, // The text that was actually matched against the command regex
-        timestamp: msgData.timestamp,
-      };
-
-      // Start command processing timer
-      const commandTimer = commandProcessingTime.startTimer({
-        command_uuid: command.commandUUID,
-      });
-
-      void nats.publish(commandSubject, JSON.stringify(commandMessage));
-      log.info('Published command execution', {
+    // If no commands or broadcasts match, drop the message
+    if (matchingCommands.length === 0 && matchingBroadcasts.length === 0) {
+      log.info('Dropped message with no matching commands or broadcasts', {
         producer: 'router',
-        commandUUID: command.commandUUID,
-        user: msgData.user,
-        subject: commandSubject,
-        originalText: msgData.text,
-        matchedCommand: matchedCommand,
-      });
-
-      // Record successful command processing
-      commandCounter.inc({
-        command_uuid: command.commandUUID,
         platform: msgData.platform,
         network: msgData.network,
         channel: msgData.channel,
-        rate_limit_action: 'allowed',
+        user: msgData.user,
+        text: msgData.text,
       });
-      natsPublishCounter.inc({ type: 'command' });
-      commandTimer();
+
+      // Increment message counter for dropped messages
+      messageCounter.inc({
+        platform: msgData.platform,
+        network: msgData.network,
+        result: 'dropped',
+      });
+
+      return;
+    }
+
+    // Increment message counter for processed messages
+    messageCounter.inc({
+      platform: msgData.platform,
+      network: msgData.network,
+      result: 'processed',
     });
+
+    // For each matching command, check rate limits and publish command execution message
+    matchingCommands.forEach(
+      ({ command, matchedText, argsText, matchedCommand }) => {
+        // Use the pre-processed text and args from the command registry
+        const processedText = argsText;
+        const textToMatch = matchedText;
+
+        // Check rate limits
+        const isAllowed = rateLimiter.isAllowed(
+          command.commandUUID,
+          command.ratelimit,
+          msgData.platform,
+          msgData.network,
+          msgData.instance,
+          msgData.channel,
+          msgData.user
+        );
+
+        // Handle rate limiting based on mode
+        if (!isAllowed) {
+          if (command.ratelimit.mode === 'drop') {
+            // Drop the command execution - do nothing
+            rateLimitCounter.inc({
+              command_uuid: command.commandUUID,
+              action: 'dropped',
+              mode: command.ratelimit.mode,
+            });
+            commandCounter.inc({
+              command_uuid: command.commandUUID,
+              platform: msgData.platform,
+              network: msgData.network,
+              channel: msgData.channel,
+              rate_limit_action: 'dropped',
+            });
+            return;
+          } else if (command.ratelimit.mode === 'enqueue') {
+            // Enqueue the command for later execution
+            rateLimitCounter.inc({
+              command_uuid: command.commandUUID,
+              action: 'enqueued',
+              mode: command.ratelimit.mode,
+            });
+            commandCounter.inc({
+              command_uuid: command.commandUUID,
+              platform: msgData.platform,
+              network: msgData.network,
+              channel: msgData.channel,
+              rate_limit_action: 'enqueued',
+            });
+            const commandSubject = `command.execute.${command.commandUUID}`;
+            rateLimiter.enqueueCommand(
+              command.commandUUID,
+              msgData.platform,
+              msgData.network,
+              msgData.instance,
+              msgData.channel,
+              msgData.user,
+              msgData.userHost || '',
+              processedText,
+              msgData.text,
+              matchedCommand,
+              msgData.timestamp,
+              [commandSubject]
+            );
+            return;
+          }
+        }
+
+        const commandSubject = `command.execute.${command.commandUUID}`;
+        const commandMessage = {
+          platform: msgData.platform,
+          network: msgData.network,
+          instance: msgData.instance,
+          channel: msgData.channel,
+          user: msgData.user,
+          userHost: msgData.userHost,
+          text: processedText,
+          originalText: msgData.text,
+          matchedCommand: matchedCommand,
+          matchedText: textToMatch, // The text that was actually matched against the command regex
+          timestamp: msgData.timestamp,
+        };
+
+        // Start command processing timer
+        const commandTimer = commandProcessingTime.startTimer({
+          command_uuid: command.commandUUID,
+        });
+
+        void nats.publish(commandSubject, JSON.stringify(commandMessage));
+        log.info('Published command execution', {
+          producer: 'router',
+          commandUUID: command.commandUUID,
+          user: msgData.user,
+          subject: commandSubject,
+          originalText: msgData.text,
+          matchedCommand: matchedCommand,
+        });
+
+        // Record successful command processing
+        commandCounter.inc({
+          command_uuid: command.commandUUID,
+          platform: msgData.platform,
+          network: msgData.network,
+          channel: msgData.channel,
+          rate_limit_action: 'allowed',
+        });
+        natsPublishCounter.inc({ type: 'command' });
+        commandTimer();
+      }
+    );
 
     // For each matching broadcast, publish the message to the broadcast channel
     matchingBroadcasts.forEach((broadcast) => {

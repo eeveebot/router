@@ -124,8 +124,20 @@ export class CommandRegistry {
     commandText: string,
     commonPrefixRegex?: string,
     botNick?: string
-  ): RegisteredCommand[] {
-    return Array.from(this.commands.values()).filter((cmd) => {
+  ): Array<{
+    command: RegisteredCommand;
+    matchedText: string;
+    argsText: string;
+    matchedCommand: string;
+  }> {
+    const results: Array<{
+      command: RegisteredCommand;
+      matchedText: string;
+      argsText: string;
+      matchedCommand: string;
+    }> = [];
+
+    for (const cmd of this.commands.values()) {
       // Check platform, network, instance, channel, and user regexes
       if (
         !cmd.platformRegex.test(platform) ||
@@ -134,12 +146,12 @@ export class CommandRegistry {
         !cmd.channelRegex.test(channel) ||
         !cmd.userRegex.test(user)
       ) {
-        return false;
+        continue;
       }
 
       // Process text for prefix matching - both prefixes can be applied in sequence
       let textToMatch = commandText;
-      
+
       // Apply platform prefix if allowed
       if (cmd.platformPrefixAllowed && commonPrefixRegex) {
         try {
@@ -170,11 +182,23 @@ export class CommandRegistry {
         }
       }
 
-      // Check if the command regex matches the text
-      if (cmd.platformPrefixAllowed || cmd.nickPrefixAllowed) {
-        // For commands that allow prefixes, we match against the possibly stripped text
-        return cmd.commandRegex.test(textToMatch);
+      // Check if the command regex matches the text and extract match details
+      const commandMatch = textToMatch.match(cmd.commandRegex);
+      if (commandMatch) {
+        // Extract the args text (text after the matched command)
+        const textAfterCommand = textToMatch
+          .slice((commandMatch.index || 0) + commandMatch[0].length)
+          .trimStart();
+
+        results.push({
+          command: cmd,
+          matchedText: textToMatch,
+          argsText: textAfterCommand,
+          matchedCommand: commandMatch[0],
+        });
       }
-    });
+    }
+
+    return results;
   }
 }
