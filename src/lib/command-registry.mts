@@ -149,17 +149,19 @@ export class CommandRegistry {
         continue;
       }
 
-      // Process text for prefix matching - both prefixes can be applied in sequence
+      // Process text for prefix matching
       let textToMatch = commandText;
 
-      // Apply platform prefix if allowed
+      // If platform prefix is allowed, it must be present
       if (cmd.platformPrefixAllowed && commonPrefixRegex) {
+        let prefixFound = false;
         try {
           const prefixRegex = new RegExp(commonPrefixRegex);
           const match = textToMatch.match(prefixRegex);
           if (match) {
             // Remove the prefix from the command text for matching
             textToMatch = textToMatch.slice(match[0].length).trim();
+            prefixFound = true;
           }
         } catch (error) {
           // If the prefix regex is invalid, log an error but continue with original text
@@ -169,16 +171,28 @@ export class CommandRegistry {
             error: (error as Error).message,
           });
         }
+        
+        // If platform prefix is required but not found, skip this command
+        if (!prefixFound) {
+          continue;
+        }
       }
-
-      // Apply nick prefix if allowed
+      
+      // If nick prefix is allowed, it must be present
       if (cmd.nickPrefixAllowed && botNick) {
+        let nickPrefixFound = false;
         // Create a regex pattern to match the bot's nick followed by common separators
         const nickPrefixPattern = new RegExp(`^${botNick}[:;, ]+`, 'i');
         const nickMatch = textToMatch.match(nickPrefixPattern);
         if (nickMatch) {
           // Remove the nick prefix from the command text for matching
           textToMatch = textToMatch.slice(nickMatch[0].length).trim();
+          nickPrefixFound = true;
+        }
+        
+        // If nick prefix is required but not found, skip this command
+        if (!nickPrefixFound) {
+          continue;
         }
       }
 
