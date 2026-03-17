@@ -386,6 +386,7 @@ export function handleChatMessage(
         instance: msgData.instance,
         channel: msgData.channel,
         user: msgData.user,
+        nick: msgData.nick,
         userHost: msgData.userHost,
         text: msgData.text,
         timestamp: msgData.timestamp,
