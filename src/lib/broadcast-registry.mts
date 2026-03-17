@@ -56,11 +56,12 @@ export class BroadcastRegistry {
       const registeredBroadcast: RegisteredBroadcast = {
         broadcastUUID: registration.broadcastUUID,
         broadcastDisplayName: registration.broadcastDisplayName,
-        platformRegex: new RegExp(registration.platform),
-        networkRegex: new RegExp(registration.network),
-        instanceRegex: new RegExp(registration.instance),
-        channelRegex: new RegExp(registration.channel),
-        userRegex: new RegExp(registration.user),
+        platformRegex: new RegExp(registration.platform || '.*'),
+        networkRegex: new RegExp(registration.network || '.*'),
+        instanceRegex: new RegExp(registration.instance || '.*'),
+        channelRegex: new RegExp(registration.channel || '.*'),
+        userRegex: new RegExp(registration.user || '.*'),
+        nickRegex: new RegExp(registration.nick || '.*'),
         messageFilterRegex: registration.messageFilterRegex
           ? new RegExp(registration.messageFilterRegex)
           : undefined,
@@ -114,16 +115,18 @@ export class BroadcastRegistry {
     instance: string,
     channel: string,
     user: string,
+    nick: string,
     messageText: string
   ): RegisteredBroadcast[] {
     return Array.from(this.broadcasts.values()).filter((broadcast) => {
-      // Check platform, network, instance, channel, and user regexes
+      // Check platform, network, instance, channel, user, and nick regexes
       if (
         !broadcast.platformRegex.test(platform) ||
         !broadcast.networkRegex.test(network) ||
         !broadcast.instanceRegex.test(instance) ||
         !broadcast.channelRegex.test(channel) ||
-        !broadcast.userRegex.test(user)
+        !broadcast.userRegex.test(user) ||
+        !broadcast.nickRegex.test(nick)
       ) {
         return false;
       }

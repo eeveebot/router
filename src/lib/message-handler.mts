@@ -3,16 +3,13 @@ import { CommandRegistry } from './command-registry.mjs';
 import { BroadcastRegistry } from './broadcast-registry.mjs';
 import { RateLimiter } from './rate-limiter.mjs';
 import { RouterConfig } from '../types/config.mjs';
+import { broadcastCounter, rateLimitCounter } from './metrics/index.mjs';
 import {
-  broadcastCounter,
-  rateLimitCounter,
-} from './metrics/index.mjs';
-import { 
   messageCounter,
   messageProcessingTime,
   commandCounter,
   commandProcessingTime,
-  natsPublishCounter
+  natsPublishCounter,
 } from '@eeveebot/libeevee';
 
 interface MessageData {
@@ -20,6 +17,7 @@ interface MessageData {
   network: string;
   instance: string;
   channel: string;
+  nick: string;
   user: string;
   userHost?: string;
   text: string;
@@ -230,6 +228,7 @@ export function handleChatMessage(
       msgData.instance,
       msgData.channel,
       msgData.user,
+      msgData.nick,
       msgData.text,
       msgData.commonPrefixRegex,
       msgData.botNick
@@ -242,6 +241,7 @@ export function handleChatMessage(
       msgData.instance,
       msgData.channel,
       msgData.user,
+      msgData.nick,
       msgData.text
     );
 
@@ -267,11 +267,11 @@ export function handleChatMessage(
     }
 
     // Increment message counter for processed messages
-      messageCounter.inc({
-        module: 'router',
-        direction: 'incoming',
-        result: 'processed',
-      });
+    messageCounter.inc({
+      module: 'router',
+      direction: 'incoming',
+      result: 'processed',
+    });
 
     // For each matching command, check rate limits and publish command execution message
     matchingCommands.forEach(
@@ -368,10 +368,10 @@ export function handleChatMessage(
         });
 
         // Record successful command processing
-            commandCounter.inc({
-              module: 'router',
-              result: 'success',
-            });
+        commandCounter.inc({
+          module: 'router',
+          result: 'success',
+        });
         natsPublishCounter.inc({ module: 'router', type: 'command' });
         commandTimer();
       }

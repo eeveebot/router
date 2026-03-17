@@ -53,11 +53,12 @@ export class CommandRegistry {
       const registeredCommand: RegisteredCommand = {
         commandUUID: registration.commandUUID,
         commandDisplayName: registration.commandDisplayName,
-        platformRegex: new RegExp(registration.platform),
-        networkRegex: new RegExp(registration.network),
-        instanceRegex: new RegExp(registration.instance),
-        channelRegex: new RegExp(registration.channel),
-        userRegex: new RegExp(registration.user),
+        platformRegex: new RegExp(registration.platform || '.*'),
+        networkRegex: new RegExp(registration.network || '.*'),
+        instanceRegex: new RegExp(registration.instance || '.*'),
+        channelRegex: new RegExp(registration.channel || '.*'),
+        userRegex: new RegExp(registration.user || '.*'),
+        nickRegex: new RegExp(registration.nick || '.*'),
         commandRegex: new RegExp(registration.regex),
         platformPrefixAllowed: registration.platformPrefixAllowed,
         nickPrefixAllowed: registration.nickPrefixAllowed,
@@ -121,6 +122,7 @@ export class CommandRegistry {
     instance: string,
     channel: string,
     user: string,
+    nick: string,
     commandText: string,
     commonPrefixRegex?: string,
     botNick?: string
@@ -138,13 +140,14 @@ export class CommandRegistry {
     }> = [];
 
     for (const cmd of this.commands.values()) {
-      // Check platform, network, instance, channel, and user regexes
+      // Check platform, network, instance, channel, user, and nick regexes
       if (
         !cmd.platformRegex.test(platform) ||
         !cmd.networkRegex.test(network) ||
         !cmd.instanceRegex.test(instance) ||
         !cmd.channelRegex.test(channel) ||
-        !cmd.userRegex.test(user)
+        !cmd.userRegex.test(user) ||
+        !cmd.nickRegex.test(nick)
       ) {
         continue;
       }
@@ -153,13 +156,14 @@ export class CommandRegistry {
       let textToMatch = commandText;
 
       // Track if we need to match prefixes
-      const needsPlatformPrefix = cmd.platformPrefixAllowed && commonPrefixRegex;
+      const needsPlatformPrefix =
+        cmd.platformPrefixAllowed && commonPrefixRegex;
       const needsNickPrefix = cmd.nickPrefixAllowed && botNick;
-      
+
       // If either prefix is required, try to match one of them
       if (needsPlatformPrefix || needsNickPrefix) {
         let prefixMatched = false;
-        
+
         // Try platform prefix first
         if (needsPlatformPrefix) {
           try {
@@ -179,7 +183,7 @@ export class CommandRegistry {
             });
           }
         }
-        
+
         // Try nick prefix if platform prefix didn't match (or if only nick prefix is needed)
         if (needsNickPrefix && !prefixMatched) {
           // Create a regex pattern to match the bot's nick followed by common separators
@@ -191,7 +195,7 @@ export class CommandRegistry {
             prefixMatched = true;
           }
         }
-        
+
         // If a prefix is required but none matched, skip this command
         if (!prefixMatched) {
           continue;
