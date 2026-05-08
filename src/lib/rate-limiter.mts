@@ -173,6 +173,11 @@ export class RateLimiter {
         interval: ratelimit.interval,
       };
       this.limits.set(key, state);
+    } else {
+      // Update limit and interval in case the command was re-registered
+      // with new rate limit settings (e.g. config change + re-registration)
+      state.limit = ratelimit.limit;
+      state.interval = ratelimit.interval;
     }
 
     // Reset counter if interval has passed
