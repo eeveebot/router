@@ -74,7 +74,8 @@ initializeSystemMetrics('router');
 // Setup HTTP API server
 setupHttpServer({
   port: process.env.HTTP_API_PORT || '9000',
-  serviceName: 'router'
+  serviceName: 'router',
+  natsClients: natsClients,
 });
 
 //

@@ -1,6 +1,6 @@
 {
   "name": "@eeveebot/router",
-  "version": "2.4.5",
+  "version": "2.4.6",
   "description": "the eevee router module",
   "keywords": [
     "eevee"
@@ -28,7 +28,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@eeveebot/libeevee": "^4.0.1",
+    "@eeveebot/libeevee": "^4.0.8",
     "express": "^5.2.1",
     "irc-framework": "^4.14.0",
     "js-yaml": "^4.1.1",
