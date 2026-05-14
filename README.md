@@ -97,6 +97,8 @@ blocklist:
 
 All regex fields are matched case-sensitively. Omitted scope fields default to matching everything.
 
+Blocklist patterns are pre-compiled at config load time using the safe `compileRegex` helper (500 character limit, fallback to `/.^/` on failure). Malformed patterns are logged and skipped rather than crashing the router.
+
 ## Usage / Commands
 
 ### Running
@@ -117,6 +119,8 @@ The router subscribes to and publishes on the following NATS subjects:
 | `chat.message.incoming.>` | Incoming chat messages from connectors |
 | `command.register` | Command registration requests from modules |
 | `broadcast.register` | Broadcast registration requests from modules |
+| `command.unregister` | Command unregistration requests from modules |
+| `broadcast.unregister` | Broadcast unregistration requests from modules |
 | `admin.request.router` | Admin queries (rate-limit stats, command registry) |
 | `stats.emit.request` | Stats collection requests |
 | `stats.uptime` | Uptime queries |
@@ -130,7 +134,8 @@ The router subscribes to and publishes on the following NATS subjects:
 | `control.registerCommands` | Prompt all modules to re-register commands |
 | `control.registerBroadcasts` | Prompt all modules to re-register broadcasts |
 | `control.registerCommands.<name>` | Prompt a specific module to re-register |
-| `chat.notice.outgoing.irc.<instance>` | Send an IRC NOTICE (rate-limit notifications) |
+| `chat.notice.outgoing.irc.<instance>` | Send an IRC NOTICE (rate-limit notifications, 15s cooldown per user) |
+| `help.remove` | Remove help entries for a module |
 | `admin.response.router.ratelimit-stats` | Admin response with rate-limit data |
 | `admin.response.router.command-registry` | Admin response with command registry data |
 
@@ -182,6 +187,7 @@ Modules register commands by publishing to `command.register`:
 |---|---|---|
 | `mode` | Yes | `"drop"` (discard excess) or `"enqueue"` (queue for later execution) |
 | `level` | Yes | Granularity: `"global"`, `"platform"`, `"instance"`, `"channel"`, or `"user"` |
+| `notificationCooldown` | No | Seconds between rate-limit notices to the same user (default: 15) |
 | `limit` | Yes | Max allowed executions per interval (`0` disables rate limiting) |
 | `interval` | Yes | Time window, e.g. `"30s"`, `"5m"`, `"1h"` |
 
@@ -260,6 +266,7 @@ Modules register broadcasts by publishing to `broadcast.register`:
 | `admin-handler` | `lib/admin-handler.mts` | Handles admin queries for rate-limit stats and command registry inspection |
 | `stats-handler` | `lib/stats-handler.mts` | Responds to stats/uptime requests |
 | `router-config` | `lib/router-config.mts` | Loads and validates the YAML config file |
+| `compile-regex` | `lib/compile-regex.mts` | Safe regex compilation with ReDoS protection (500 char limit, fallback to `/.^/`) |
 | `nats-setup` | `lib/nats-setup.mts` | Establishes NATS connection from environment variables |
 
 ### Prometheus Metrics
