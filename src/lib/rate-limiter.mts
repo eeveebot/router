@@ -111,6 +111,9 @@ export class RateLimiter {
       case 'global':
         identifier = 'global';
         break;
+      default:
+        identifier = 'global';
+        break;
     }
 
     return `${commandUUID}:${identifier}`;

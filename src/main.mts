@@ -188,7 +188,7 @@ const statsEmitRequestSub = nats.subscribe(
 );
 
 // Subscribe to stats.uptime messages and respond with module uptime
-const statsUptimeSub = nats.subscribe('stats.uptime', (subject, message) => {
+const statsUptimeSub = nats.subscribe('stats.uptime', (subject: string, message: Nats.Msg) => {
   handleStatsUptimeRequest(subject, message, nats);
 });
 natsSubscriptions.push(statsEmitRequestSub, statsUptimeSub);
