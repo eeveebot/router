@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import yaml from 'js-yaml';
 import { log } from '@eeveebot/libeevee';
-import { RouterConfig, BlocklistEntry, CompiledBlocklistEntry } from '../types/config.mjs';
+import { RouterConfig, CompiledBlocklistEntry } from '../types/config.mjs';
 
 const ROUTER_CONFIG_ENV_VAR = 'MODULE_CONFIG_PATH';
 

@@ -1,7 +1,5 @@
 'use strict';
 
-import { log } from '@eeveebot/libeevee';
-
 // Blocklist entry interface - follows same pattern as command registration
 export interface BlocklistEntry {
   pattern: string; // regex pattern to match against message text
