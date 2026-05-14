@@ -3,6 +3,7 @@ import {
   BroadcastRegistration,
   RegisteredBroadcast,
 } from '../types/broadcast.mjs';
+import { compileRegex } from './compile-regex.mjs';
 
 export class BroadcastRegistry {
   private broadcasts: Map<string, RegisteredBroadcast> = new Map();
@@ -52,36 +53,29 @@ export class BroadcastRegistry {
   }
 
   registerBroadcast(registration: BroadcastRegistration): void {
-    try {
-      const registeredBroadcast: RegisteredBroadcast = {
-        broadcastUUID: registration.broadcastUUID,
-        broadcastDisplayName: registration.broadcastDisplayName,
-        platformRegex: new RegExp(registration.platform || '.*'),
-        networkRegex: new RegExp(registration.network || '.*'),
-        instanceRegex: new RegExp(registration.instance || '.*'),
-        channelRegex: new RegExp(registration.channel || '.*'),
-        userRegex: new RegExp(registration.user || '.*'),
-        nickRegex: new RegExp(registration.nick || '.*'),
-        messageFilterRegex: registration.messageFilterRegex
-          ? new RegExp(registration.messageFilterRegex)
-          : undefined,
-      };
+    const ctx = `broadcast ${registration.broadcastDisplayName ?? registration.broadcastUUID}`;
 
-      this.broadcasts.set(registration.broadcastUUID, registeredBroadcast);
+    const registeredBroadcast: RegisteredBroadcast = {
+      broadcastUUID: registration.broadcastUUID,
+      broadcastDisplayName: registration.broadcastDisplayName,
+      platformRegex: compileRegex(registration.platform || '.*', `${ctx} platform`),
+      networkRegex: compileRegex(registration.network || '.*', `${ctx} network`),
+      instanceRegex: compileRegex(registration.instance || '.*', `${ctx} instance`),
+      channelRegex: compileRegex(registration.channel || '.*', `${ctx} channel`),
+      userRegex: compileRegex(registration.user || '.*', `${ctx} user`),
+      nickRegex: compileRegex(registration.nick || '.*', `${ctx} nick`),
+      messageFilterRegex: registration.messageFilterRegex
+        ? compileRegex(registration.messageFilterRegex, `${ctx} messageFilter`)
+        : undefined,
+    };
 
-      log.info('Registered broadcast', {
-        producer: 'router',
-        broadcastUUID: registration.broadcastUUID,
-        broadcastDisplayName: registration.broadcastDisplayName,
-      });
-    } catch (error) {
-      log.error('Failed to register broadcast', {
-        producer: 'router',
-        broadcastUUID: registration.broadcastUUID,
-        broadcastDisplayName: registration.broadcastDisplayName,
-        errorMessage: (error as Error).message,
-      });
-    }
+    this.broadcasts.set(registration.broadcastUUID, registeredBroadcast);
+
+    log.info('Registered broadcast', {
+      producer: 'router',
+      broadcastUUID: registration.broadcastUUID,
+      broadcastDisplayName: registration.broadcastDisplayName,
+    });
   }
 
   unregisterBroadcast(broadcastUUID: string): boolean {

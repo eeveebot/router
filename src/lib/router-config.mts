@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import yaml from 'js-yaml';
 import { log } from '@eeveebot/libeevee';
-import { RouterConfig } from '../types/config.mjs';
+import { RouterConfig, BlocklistEntry, CompiledBlocklistEntry } from '../types/config.mjs';
 
 const ROUTER_CONFIG_ENV_VAR = 'MODULE_CONFIG_PATH';
 
@@ -35,7 +35,9 @@ export async function loadRouterConfig(): Promise<RouterConfig> {
         throw new Error(msg);
       }
 
-      // Validate each blocklist entry
+      // Compile blocklist entries and validate regex patterns
+      const compiledBlocklist: CompiledBlocklistEntry[] = [];
+
       for (const [index, entry] of config.blocklist.entries()) {
         if (!entry.pattern) {
           const msg = `Invalid blocklist entry at index ${index}: pattern is required`;
@@ -43,18 +45,19 @@ export async function loadRouterConfig(): Promise<RouterConfig> {
           throw new Error(msg);
         }
 
-        // Try to compile the regex patterns to validate them
+        // Compile and validate each regex field
         const regexFields = ['pattern', 'platform', 'network', 'instance', 'channel', 'user'] as const;
+        const compiled: Record<string, RegExp | undefined> = {};
         for (const field of regexFields) {
           const value = entry[field];
           if (value) {
             try {
-              new RegExp(value);
+              compiled[field] = new RegExp(value);
             } catch (error) {
               const msg = `Invalid blocklist entry at index ${index}: ${field} is not a valid regex`;
-              log.error(msg, { 
-                producer: 'router', 
-                configPath, 
+              log.error(msg, {
+                producer: 'router',
+                configPath,
                 field: String(field),
                 pattern: value,
                 error: error instanceof Error ? error.message : String(error),
@@ -63,7 +66,20 @@ export async function loadRouterConfig(): Promise<RouterConfig> {
             }
           }
         }
+
+        compiledBlocklist.push({
+          pattern: compiled.pattern!,
+          enabled: entry.enabled,
+          description: entry.description,
+          platform: compiled.platform,
+          network: compiled.network,
+          instance: compiled.instance,
+          channel: compiled.channel,
+          user: compiled.user,
+        });
       }
+
+      config.blocklist = compiledBlocklist;
 
       log.info(
         `Loaded router configuration with ${config.blocklist.length} blocklist entries`,

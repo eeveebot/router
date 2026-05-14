@@ -11,6 +11,11 @@ export interface BroadcastRegistration {
   messageFilterRegex?: string; // Optional regex pattern to filter messages
 }
 
+export interface BroadcastUnregistration {
+  type: 'broadcast.unregister';
+  broadcastUUID: string;
+}
+
 export interface RegisteredBroadcast {
   broadcastUUID: string;
   broadcastDisplayName?: string; // Optional display name for logs and UI

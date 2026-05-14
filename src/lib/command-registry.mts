@@ -1,5 +1,6 @@
 import { NatsClient, log } from '@eeveebot/libeevee';
 import { CommandRegistration, RegisteredCommand } from '../types/command.mjs';
+import { compileRegex } from './compile-regex.mjs';
 
 export class CommandRegistry {
   private commands: Map<string, RegisteredCommand> = new Map();
@@ -49,37 +50,30 @@ export class CommandRegistry {
   }
 
   registerCommand(registration: CommandRegistration): void {
-    try {
-      const registeredCommand: RegisteredCommand = {
-        commandUUID: registration.commandUUID,
-        commandDisplayName: registration.commandDisplayName,
-        platformRegex: new RegExp(registration.platform || '.*'),
-        networkRegex: new RegExp(registration.network || '.*'),
-        instanceRegex: new RegExp(registration.instance || '.*'),
-        channelRegex: new RegExp(registration.channel || '.*'),
-        userRegex: new RegExp(registration.user || '.*'),
-        nickRegex: new RegExp(registration.nick || '.*'),
-        commandRegex: new RegExp(registration.regex),
-        platformPrefixAllowed: registration.platformPrefixAllowed,
-        nickPrefixAllowed: registration.nickPrefixAllowed,
-        ratelimit: registration.ratelimit,
-      };
+    const ctx = `command ${registration.commandDisplayName ?? registration.commandUUID}`;
 
-      this.commands.set(registration.commandUUID, registeredCommand);
+    const registeredCommand: RegisteredCommand = {
+      commandUUID: registration.commandUUID,
+      commandDisplayName: registration.commandDisplayName,
+      platformRegex: compileRegex(registration.platform || '.*', `${ctx} platform`),
+      networkRegex: compileRegex(registration.network || '.*', `${ctx} network`),
+      instanceRegex: compileRegex(registration.instance || '.*', `${ctx} instance`),
+      channelRegex: compileRegex(registration.channel || '.*', `${ctx} channel`),
+      userRegex: compileRegex(registration.user || '.*', `${ctx} user`),
+      nickRegex: compileRegex(registration.nick || '.*', `${ctx} nick`),
+      commandRegex: compileRegex(registration.regex, `${ctx} command`),
+      platformPrefixAllowed: registration.platformPrefixAllowed,
+      nickPrefixAllowed: registration.nickPrefixAllowed,
+      ratelimit: registration.ratelimit,
+    };
 
-      log.info('Registered command', {
-        producer: 'router',
-        commandUUID: registration.commandUUID,
-        commandDisplayName: registration.commandDisplayName,
-      });
-    } catch (error) {
-      log.error('Failed to register command', {
-        producer: 'router',
-        commandUUID: registration.commandUUID,
-        commandDisplayName: registration.commandDisplayName,
-        errorMessage: (error as Error).message,
-      });
-    }
+    this.commands.set(registration.commandUUID, registeredCommand);
+
+    log.info('Registered command', {
+      producer: 'router',
+      commandUUID: registration.commandUUID,
+      commandDisplayName: registration.commandDisplayName,
+    });
   }
 
   unregisterCommand(commandUUID: string): boolean {
@@ -186,13 +180,23 @@ export class CommandRegistry {
 
         // Try nick prefix if platform prefix didn't match (or if only nick prefix is needed)
         if (needsNickPrefix && !prefixMatched) {
-          // Create a regex pattern to match the bot's nick followed by common separators
-          const nickPrefixPattern = new RegExp(`^${botNick}[:;, ]*`, 'i');
-          const nickMatch = textToMatch.match(nickPrefixPattern);
-          if (nickMatch) {
-            // Remove the nick prefix from the command text for matching
-            textToMatch = textToMatch.slice(nickMatch[0].length).trim();
-            prefixMatched = true;
+          try {
+            // Escape regex special characters in botNick to prevent injection
+            const escapedNick = botNick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const nickPrefixPattern = new RegExp(`^${escapedNick}[:;, ]*`, 'i');
+            const nickMatch = textToMatch.match(nickPrefixPattern);
+            if (nickMatch) {
+              // Remove the nick prefix from the command text for matching
+              textToMatch = textToMatch.slice(nickMatch[0].length).trim();
+              prefixMatched = true;
+            }
+          } catch (error) {
+            // If the nick prefix regex is invalid, log an error but continue with original text
+            log.error('Invalid nickPrefixPattern, using original text', {
+              producer: 'router',
+              botNick,
+              error: (error as Error).message,
+            });
           }
         }
 

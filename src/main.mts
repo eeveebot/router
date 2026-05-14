@@ -4,6 +4,7 @@
 // List for messages and routes them appropriately
 // Also handles command registration
 
+import * as Nats from 'nats';
 import { NatsClient, log } from '@eeveebot/libeevee';
 import { CommandRegistry } from './lib/command-registry.mjs';
 import { RateLimiter } from './lib/rate-limiter.mjs';
@@ -17,6 +18,8 @@ import { handleChatMessage } from './lib/message-handler.mjs';
 import {
   handleCommandRegistration,
   handleBroadcastRegistration,
+  handleCommandUnregistration,
+  handleBroadcastUnregistration,
 } from './lib/registration-handler.mjs';
 import { handleAdminRequest } from './lib/admin-handler.mjs';
 import {
@@ -27,7 +30,7 @@ import {
 import { initializeSystemMetrics, setupHttpServer, natsSubscribeCounter } from '@eeveebot/libeevee';
 
 const natsClients: InstanceType<typeof NatsClient>[] = [];
-const natsSubscriptions: Array<Promise<string | boolean>> = [];
+const natsSubscriptions: Array<Promise<Nats.Subscription | false>> = [];
 
 // Setup NATS connection
 const nats = await setupNatsConnection();
@@ -139,6 +142,30 @@ natsSubscriptions.push(broadcastRegisterSubscription);
 
 // Record subscription metric
 natsSubscribeCounter.inc({ module: 'router', subject: 'broadcast.register' });
+
+// Subscribe to command.unregister messages
+const commandUnregisterSubscription = nats.subscribe(
+  'command.unregister',
+  (subject, message) => {
+    handleCommandUnregistration(subject, message, commandRegistry);
+  }
+);
+natsSubscriptions.push(commandUnregisterSubscription);
+
+// Record subscription metric
+natsSubscribeCounter.inc({ module: 'router', subject: 'command.unregister' });
+
+// Subscribe to broadcast.unregister messages
+const broadcastUnregisterSubscription = nats.subscribe(
+  'broadcast.unregister',
+  (subject, message) => {
+    handleBroadcastUnregistration(subject, message, broadcastRegistry);
+  }
+);
+natsSubscriptions.push(broadcastUnregisterSubscription);
+
+// Record subscription metric
+natsSubscribeCounter.inc({ module: 'router', subject: 'broadcast.unregister' });
 
 // Subscribe to admin requests for rate limit statistics
 const adminRequestSub = nats.subscribe(

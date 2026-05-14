@@ -25,6 +25,9 @@ interface QueuedCommand {
   subjects: string[];
 }
 
+/** Cooldown in ms for rate limit notifications per user per command */
+const NOTIFICATION_COOLDOWN_MS = 15_000;
+
 export class RateLimiter {
   private limits: Map<string, RateLimitState> = new Map();
   private commandQueue: QueuedCommand[] = [];
@@ -33,6 +36,8 @@ export class RateLimiter {
   private commandRegistry:
     | import('./command-registry.mjs').CommandRegistry
     | null = null;
+  /** Tracks last notification time per user+command to avoid spam */
+  private notificationCooldowns: Map<string, number> = new Map();
 
   constructor(
     commandRegistry?: import('./command-registry.mjs').CommandRegistry
@@ -209,14 +214,20 @@ export class RateLimiter {
     });
 
     // Send a notification to the user informing them they are rate-limited
-    void this.notifier.notifyUser(
-      platform,
-      network,
-      instance,
-      channel,
-      user,
-      'You are being rate-limited. Please wait before sending more commands.'
-    );
+    // (with cooldown to avoid spam)
+    const notifKey = `${commandUUID}:${user}`;
+    const lastNotified = this.notificationCooldowns.get(notifKey);
+    if (!lastNotified || (now - lastNotified >= NOTIFICATION_COOLDOWN_MS)) {
+      void this.notifier.notifyUser(
+        platform,
+        network,
+        instance,
+        channel,
+        user,
+        'You are being rate-limited. Please wait before sending more commands.'
+      );
+      this.notificationCooldowns.set(notifKey, now);
+    }
 
     return false;
   }
@@ -284,6 +295,13 @@ export class RateLimiter {
     this.commandQueue = this.commandQueue.filter(
       (cmd) => cmd.timestamp > oneHourAgo
     );
+
+    // Clean up old notification cooldowns
+    for (const [key, lastNotified] of this.notificationCooldowns.entries()) {
+      if (now - lastNotified > 60 * 60 * 1000) {
+        this.notificationCooldowns.delete(key);
+      }
+    }
   }
 
   /**
@@ -303,6 +321,26 @@ export class RateLimiter {
       const queuedCommand = this.commandQueue.shift();
       if (!queuedCommand) {
         return;
+      }
+
+      // Re-check rate limit before executing the queued command
+      const command = this.commandRegistry?.getCommand(queuedCommand.commandUUID);
+      if (command?.ratelimit && command.ratelimit.limit > 0) {
+        const allowed = this.isAllowed(
+          queuedCommand.commandUUID,
+          command.ratelimit,
+          queuedCommand.platform,
+          queuedCommand.network,
+          queuedCommand.instance,
+          queuedCommand.channel,
+          queuedCommand.user
+        );
+
+        if (!allowed) {
+          // Still rate-limited — re-enqueue at the front and skip
+          this.commandQueue.unshift(queuedCommand);
+          return;
+        }
       }
 
       // Publish the command execution message

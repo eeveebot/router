@@ -1,4 +1,4 @@
-import { log, register } from '@eeveebot/libeevee';
+import { log, register, formatUptime } from '@eeveebot/libeevee';
 
 // Record module startup time for uptime tracking
 const moduleStartTime = Date.now();
@@ -35,7 +35,7 @@ export async function handleStatsEmitRequest(
       module: 'router',
       stats: {
         uptime_seconds: Math.floor(uptime / 1000),
-        uptime_formatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
+        uptime_formatted: formatUptime(uptime),
         memory_rss_mb: Math.round(memoryUsage.rss / (1024 * 1024)),
         memory_heap_used_mb: Math.round(memoryUsage.heapUsed / (1024 * 1024)),
         prometheus_metrics: prometheusMetrics,
@@ -78,7 +78,7 @@ export function handleStatsUptimeRequest(
     const uptimeResponse = {
       module: 'router',
       uptime: uptime,
-      uptimeFormatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
+      uptimeFormatted: formatUptime(uptime),
     };
 
     if (data.replyChannel) {

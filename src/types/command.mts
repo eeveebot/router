@@ -1,9 +1,6 @@
-export interface RateLimitConfig {
-  mode: 'enqueue' | 'drop';
-  level: 'platform' | 'instance' | 'channel' | 'user' | 'global';
-  limit: number;
-  interval: string; // e.g., "30s", "1m", "5m"
-}
+import { RateLimitConfig } from '@eeveebot/libeevee';
+
+export { RateLimitConfig };
 
 export interface CommandRegistration {
   type: 'command.register';
@@ -19,6 +16,11 @@ export interface CommandRegistration {
   platformPrefixAllowed: boolean;
   nickPrefixAllowed?: boolean; // Whether the bot's nick can be used as a prefix
   ratelimit: RateLimitConfig;
+}
+
+export interface CommandUnregistration {
+  type: 'command.unregister';
+  commandUUID: string;
 }
 
 export interface RegisteredCommand {

@@ -145,7 +145,7 @@ export function handleAdminRequest(
   } catch (error) {
     log.error('Failed to process admin request', {
       producer: 'router',
-      message: message.string(),
+      subject,
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });

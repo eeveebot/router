@@ -1,5 +1,7 @@
 'use strict';
 
+import { log } from '@eeveebot/libeevee';
+
 // Blocklist entry interface - follows same pattern as command registration
 export interface BlocklistEntry {
   pattern: string; // regex pattern to match against message text
@@ -12,7 +14,19 @@ export interface BlocklistEntry {
   user?: string; // regex pattern to match user
 }
 
+// Pre-compiled blocklist entry — used at runtime after config load
+export interface CompiledBlocklistEntry {
+  pattern: RegExp;
+  enabled?: boolean;
+  description?: string;
+  platform?: RegExp;
+  network?: RegExp;
+  instance?: RegExp;
+  channel?: RegExp;
+  user?: RegExp;
+}
+
 // Router configuration interface
 export interface RouterConfig {
-  blocklist?: BlocklistEntry[];
+  blocklist?: CompiledBlocklistEntry[];
 }

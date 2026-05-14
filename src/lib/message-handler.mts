@@ -41,7 +41,7 @@ function shouldBlockMessage(
     return false;
   }
 
-  // Check each blocklist entry
+  // Check each blocklist entry (regexes are pre-compiled at config load time)
   for (const entry of config.blocklist) {
     // Skip disabled entries
     if (entry.enabled === false) {
@@ -49,119 +49,37 @@ function shouldBlockMessage(
     }
 
     // Check if the entry applies to this message context
-    // Platform check
-    if (entry.platform) {
-      try {
-        const platformRegex = new RegExp(entry.platform);
-        if (!platformRegex.test(msgData.platform)) {
-          continue;
-        }
-      } catch (error) {
-        // If regex is invalid, skip this entry
-        log.warn('Invalid platform regex in blocklist entry', {
-          producer: 'router',
-          pattern: entry.platform,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        continue;
-      }
+    if (entry.platform && !entry.platform.test(msgData.platform)) {
+      continue;
     }
 
-    // Network check
-    if (entry.network) {
-      try {
-        const networkRegex = new RegExp(entry.network);
-        if (!networkRegex.test(msgData.network)) {
-          continue;
-        }
-      } catch (error) {
-        // If regex is invalid, skip this entry
-        log.warn('Invalid network regex in blocklist entry', {
-          producer: 'router',
-          pattern: entry.network,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        continue;
-      }
+    if (entry.network && !entry.network.test(msgData.network)) {
+      continue;
     }
 
-    // Instance check
-    if (entry.instance) {
-      try {
-        const instanceRegex = new RegExp(entry.instance);
-        if (!instanceRegex.test(msgData.instance)) {
-          continue;
-        }
-      } catch (error) {
-        // If regex is invalid, skip this entry
-        log.warn('Invalid instance regex in blocklist entry', {
-          producer: 'router',
-          pattern: entry.instance,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        continue;
-      }
+    if (entry.instance && !entry.instance.test(msgData.instance)) {
+      continue;
     }
 
-    // Channel check
-    if (entry.channel) {
-      try {
-        const channelRegex = new RegExp(entry.channel);
-        if (!channelRegex.test(msgData.channel)) {
-          continue;
-        }
-      } catch (error) {
-        // If regex is invalid, skip this entry
-        log.warn('Invalid channel regex in blocklist entry', {
-          producer: 'router',
-          pattern: entry.channel,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        continue;
-      }
+    if (entry.channel && !entry.channel.test(msgData.channel)) {
+      continue;
     }
 
-    // User check
-    if (entry.user) {
-      try {
-        const userRegex = new RegExp(entry.user);
-        if (!userRegex.test(msgData.user)) {
-          continue;
-        }
-      } catch (error) {
-        // If regex is invalid, skip this entry
-        log.warn('Invalid user regex in blocklist entry', {
-          producer: 'router',
-          pattern: entry.user,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        continue;
-      }
+    if (entry.user && !entry.user.test(msgData.user)) {
+      continue;
     }
 
     // Check if the message text matches the blocklist pattern
-    try {
-      const patternRegex = new RegExp(entry.pattern);
-      if (patternRegex.test(msgData.text)) {
-        log.info('Blocked message due to blocklist match', {
-          producer: 'router',
-          pattern: entry.pattern,
-          text: msgData.text,
-          platform: msgData.platform,
-          network: msgData.network,
-          instance: msgData.instance,
-          channel: msgData.channel,
-          user: msgData.user,
-        });
-        return true;
-      }
-    } catch (error) {
-      // If regex is invalid, log warning but don't block the message
-      log.warn('Invalid pattern regex in blocklist entry', {
+    if (entry.pattern.test(msgData.text)) {
+      log.info('Blocked message due to blocklist match', {
         producer: 'router',
-        pattern: entry.pattern,
-        error: error instanceof Error ? error.message : String(error),
+        platform: msgData.platform,
+        network: msgData.network,
+        instance: msgData.instance,
+        channel: msgData.channel,
+        user: msgData.user,
       });
+      return true;
     }
   }
 
@@ -198,6 +116,9 @@ export function handleChatMessage(
       network: msgData.network,
       channel: msgData.channel,
       user: msgData.user,
+    });
+    log.debug('Received chat message text', {
+      producer: 'router',
       text: msgData.text,
     });
 
@@ -253,7 +174,6 @@ export function handleChatMessage(
         network: msgData.network,
         channel: msgData.channel,
         user: msgData.user,
-        text: msgData.text,
       });
 
       // Increment message counter for dropped messages
@@ -417,7 +337,6 @@ export function handleChatMessage(
       producer: 'router',
       subject: subject,
       errorMessage: error.message,
-      rawMessage: message.string(),
     });
 
     // Increment error counter
