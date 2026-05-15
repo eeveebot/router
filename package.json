@@ -30,7 +30,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@eeveebot/libeevee": "^4.2.2",
+    "@eeveebot/libeevee": "^4.2.5",
     "js-yaml": "^4.1.1",
     "nats": "^2.29.3",
     "prom-client": "^15.1.3"
