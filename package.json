@@ -1,6 +1,7 @@
 {
   "name": "@eeveebot/router",
-  "version": "2.5.5",
+  "version": "2.5.6",
+  "type": "module",
   "description": "the eevee router module",
   "keywords": [
     "eevee"
@@ -16,6 +17,7 @@
     "update-libraries": "npm install --save @eeveebot/libeevee@latest"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.1.0",
     "@types/express": "^5.0.6",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^18.19.130",
@@ -29,11 +31,8 @@
   },
   "dependencies": {
     "@eeveebot/libeevee": "^4.2.2",
-    "express": "^5.2.1",
-    "irc-framework": "^4.14.0",
     "js-yaml": "^4.1.1",
     "nats": "^2.29.3",
-    "prom-client": "^15.1.3",
-    "winston": "^3.19.0"
+    "prom-client": "^15.1.3"
   }
 }
