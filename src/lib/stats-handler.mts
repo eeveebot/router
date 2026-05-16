@@ -3,7 +3,7 @@ import fs from 'node:fs';
 
 // Record module startup time for uptime tracking
 const moduleStartTime = Date.now();
-const moduleVersion = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string;
+const moduleVersion = JSON.parse(fs.readFileSync(new URL('package.json', 'file://' + process.cwd() + '/'), 'utf8')).version as string;
 
 /**
  * Handle stats emit requests
