@@ -1,6 +1,6 @@
 {
   "name": "@eeveebot/router",
-  "version": "2.5.6",
+  "version": "2.6.0",
   "type": "module",
   "description": "the eevee router module",
   "keywords": [
