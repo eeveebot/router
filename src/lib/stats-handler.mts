@@ -1,7 +1,9 @@
 import { log, register, formatUptime } from '@eeveebot/libeevee';
+import fs from 'node:fs';
 
 // Record module startup time for uptime tracking
 const moduleStartTime = Date.now();
+const moduleVersion = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string;
 
 /**
  * Handle stats emit requests
@@ -34,6 +36,7 @@ export async function handleStatsEmitRequest(
     const statsResponse = {
       module: 'router',
       stats: {
+        version: moduleVersion,
         uptime_seconds: Math.floor(uptime / 1000),
         uptime_formatted: formatUptime(uptime),
         memory_rss_mb: Math.round(memoryUsage.rss / (1024 * 1024)),
@@ -77,6 +80,7 @@ export function handleStatsUptimeRequest(
     // Send uptime back via the ephemeral reply channel
     const uptimeResponse = {
       module: 'router',
+      version: moduleVersion,
       uptime: uptime,
       uptimeFormatted: formatUptime(uptime),
     };
