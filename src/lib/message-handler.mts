@@ -271,6 +271,7 @@ export function handleChatMessage(
           matchedCommand: matchedCommand,
           matchedText: textToMatch, // The text that was actually matched against the command regex
           timestamp: msgData.timestamp,
+          botNick: msgData.botNick,
         };
 
         // Start command processing timer
@@ -311,6 +312,7 @@ export function handleChatMessage(
         userHost: msgData.userHost,
         text: msgData.text,
         timestamp: msgData.timestamp,
+        botNick: msgData.botNick,
       };
 
       void nats.publish(broadcastSubject, JSON.stringify(broadcastMessage));
