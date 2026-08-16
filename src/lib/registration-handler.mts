@@ -1,8 +1,10 @@
 import { log, RateLimitConfig } from '@eeveebot/libeevee';
 import { CommandRegistry } from './command-registry.mjs';
 import { BroadcastRegistry } from './broadcast-registry.mjs';
+import { EventRegistry } from './event-registry.mjs';
 import { CommandRegistration, CommandUnregistration } from '../types/command.mjs';
 import { BroadcastRegistration, BroadcastUnregistration } from '../types/broadcast.mjs';
+import { EventRegistration, EventUnregistration } from '../types/event.mjs';
 import { registrationCounter } from './metrics/index.mjs';
 import { errorCounter } from '@eeveebot/libeevee';
 
@@ -272,6 +274,124 @@ export function handleBroadcastUnregistration(
       module: 'router',
       type: 'registration',
       operation: 'broadcast_unregistration',
+    });
+  }
+}
+
+/**
+ * Handle event registration messages
+ * @param subject The NATS subject
+ * @param message The message content
+ * @param eventRegistry The event registry
+ */
+export function handleEventRegistration(
+  subject: string,
+  message: { string: () => string },
+  eventRegistry: EventRegistry
+): void {
+  try {
+    const registrationData = JSON.parse(
+      message.string()
+    ) as EventRegistration;
+
+    if (registrationData.type !== 'event.register') {
+      log.warn(
+        'Received non-event.register message on event.register subject',
+        {
+          producer: 'router',
+          subject: subject,
+          messageType: registrationData.type,
+        }
+      );
+      return;
+    }
+
+    eventRegistry.registerEvent(registrationData);
+    log.info('Processed event registration', {
+      producer: 'router',
+      eventUUID: registrationData.eventUUID,
+    });
+
+    registrationCounter.inc({
+      module: 'router',
+      type: 'event',
+      result: 'success',
+    });
+  } catch (err: unknown) {
+    const error = err as Error;
+    log.error('Failed to process event registration', {
+      producer: 'router',
+      subject: subject,
+      errorMessage: error.message,
+    });
+
+    registrationCounter.inc({
+      module: 'router',
+      type: 'event',
+      result: 'error',
+    });
+    errorCounter.inc({
+      module: 'router',
+      type: 'registration',
+      operation: 'event_registration',
+    });
+  }
+}
+
+/**
+ * Handle event unregistration messages
+ * @param subject The NATS subject
+ * @param message The message content
+ * @param eventRegistry The event registry
+ */
+export function handleEventUnregistration(
+  subject: string,
+  message: { string: () => string },
+  eventRegistry: EventRegistry
+): void {
+  try {
+    const data = JSON.parse(message.string()) as EventUnregistration;
+
+    if (data.type !== 'event.unregister') {
+      log.warn(
+        'Received non-event.unregister message on event.unregister subject',
+        {
+          producer: 'router',
+          subject: subject,
+          messageType: data.type,
+        }
+      );
+      return;
+    }
+
+    eventRegistry.unregisterEvent(data.eventUUID);
+    log.info('Processed event unregistration', {
+      producer: 'router',
+      eventUUID: data.eventUUID,
+    });
+
+    registrationCounter.inc({
+      module: 'router',
+      type: 'event',
+      result: 'success',
+    });
+  } catch (err: unknown) {
+    const error = err as Error;
+    log.error('Failed to process event unregistration', {
+      producer: 'router',
+      subject: subject,
+      errorMessage: error.message,
+    });
+
+    registrationCounter.inc({
+      module: 'router',
+      type: 'event',
+      result: 'error',
+    });
+    errorCounter.inc({
+      module: 'router',
+      type: 'registration',
+      operation: 'event_unregistration',
     });
   }
 }

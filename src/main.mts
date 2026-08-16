@@ -9,17 +9,21 @@ import { NatsClient, log } from '@eeveebot/libeevee';
 import { CommandRegistry } from './lib/command-registry.mjs';
 import { RateLimiter } from './lib/rate-limiter.mjs';
 import { BroadcastRegistry } from './lib/broadcast-registry.mjs';
+import { EventRegistry } from './lib/event-registry.mjs';
 import { loadRouterConfig } from './lib/router-config.mjs';
 import { RouterConfig } from './types/config.mjs';
 
 // Component imports
 import { setupNatsConnection } from './lib/nats-setup.mjs';
 import { handleChatMessage } from './lib/message-handler.mjs';
+import { handleChatEvent } from './lib/event-handler.mjs';
 import {
   handleCommandRegistration,
   handleBroadcastRegistration,
   handleCommandUnregistration,
   handleBroadcastUnregistration,
+  handleEventRegistration,
+  handleEventUnregistration,
 } from './lib/registration-handler.mjs';
 import { handleAdminRequest } from './lib/admin-handler.mjs';
 import {
@@ -55,6 +59,7 @@ try {
 
 const commandRegistry = new CommandRegistry(nats);
 const broadcastRegistry = new BroadcastRegistry(nats);
+const eventRegistry = new EventRegistry(nats);
 
 const rateLimiter = new RateLimiter(commandRegistry);
 
@@ -86,6 +91,7 @@ setupHttpServer({
 process.on('SIGINT', () => {
   commandRegistry.destroy();
   broadcastRegistry.destroy();
+  eventRegistry.destroy();
   natsClients.forEach((natsClient) => {
     void natsClient.drain();
   });
@@ -94,6 +100,7 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   commandRegistry.destroy();
   broadcastRegistry.destroy();
+  eventRegistry.destroy();
   natsClients.forEach((natsClient) => {
     void natsClient.drain();
   });
@@ -167,6 +174,42 @@ natsSubscriptions.push(broadcastUnregisterSubscription);
 // Record subscription metric
 natsSubscribeCounter.inc({ module: 'router', subject: 'broadcast.unregister' });
 
+// Subscribe to event.register messages
+const eventRegisterSubscription = nats.subscribe(
+  'event.register',
+  (subject, message) => {
+    handleEventRegistration(subject, message, eventRegistry);
+  }
+);
+natsSubscriptions.push(eventRegisterSubscription);
+
+// Record subscription metric
+natsSubscribeCounter.inc({ module: 'router', subject: 'event.register' });
+
+// Subscribe to event.unregister messages
+const eventUnregisterSubscription = nats.subscribe(
+  'event.unregister',
+  (subject, message) => {
+    handleEventUnregistration(subject, message, eventRegistry);
+  }
+);
+natsSubscriptions.push(eventUnregisterSubscription);
+
+// Record subscription metric
+natsSubscribeCounter.inc({ module: 'router', subject: 'event.unregister' });
+
+// Subscribe to chat.event.> messages (part/quit/kick from connectors)
+const chatEventSubscription = nats.subscribe(
+  'chat.event.>',
+  (subject, message) => {
+    handleChatEvent(subject, message, nats, eventRegistry, routerConfig);
+  }
+);
+natsSubscriptions.push(chatEventSubscription);
+
+// Record subscription metric
+natsSubscribeCounter.inc({ module: 'router', subject: 'chat.event.>' });
+
 // Subscribe to admin requests for rate limit statistics
 const adminRequestSub = nats.subscribe(
   'admin.request.router',
@@ -202,3 +245,6 @@ void nats.publish('control.registerCommands', JSON.stringify({}));
 
 // Ask all modules to publish their broadcasts
 void nats.publish('control.registerBroadcasts', JSON.stringify({}));
+
+// Ask all modules to publish their events
+void nats.publish('control.registerEvents', JSON.stringify({}));
